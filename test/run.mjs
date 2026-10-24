@@ -44,9 +44,13 @@ const has = (s, sub) => {
 };
 const noCrash = (r) => {
   if (r.code !== 0) throw new Error(`exit=${r.code} ${r.err.split("\n")[0]}`);
-  for (const bad of ["TypeError", "ReferenceError", "NaN", "undefined 的会话"]) {
-    if (r.out.includes(bad)) throw new Error(`输出含异常痕迹 ${bad}`);
-  }
+  // 只认"真的抛了"的形状：行首的 XxxError: 或栈帧。
+  // 早前是 out.includes("ReferenceError") —— 会话正文里提到这个词（比如正在讨论这个 bug）就误报。
+  const crashLine = /^[A-Z]\w*Error:/m.test(r.out);
+  const stackFrame = /^\s+at .*:\d+:\d+\)?$/m.test(r.out);
+  if (crashLine || stackFrame) throw new Error("输出含异常栈");
+  if (/\bNaN(?:MB| token| 处)?\b/.test(r.out)) throw new Error("输出含 NaN");
+  if (r.out.includes("undefined 的会话")) throw new Error("输出含 undefined 拼接");
   return "ok";
 };
 
@@ -415,6 +419,46 @@ check("Claude 首次注册：成功后不能报失败（曾经 ReferenceError）
   const calls = fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "";
   if (!calls.includes("--scope user aab")) throw new Error(`没有真的调用 claude mcp add：${calls}`);
   return "退出码 0，add 已执行，回执为成功";
+});
+
+check("多条信任记录取最近一次（否则永远报旧配置）", () => {
+  const mk = (grants) => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "aab-trust-"));
+    fs.mkdirSync(path.join(home, ".workbuddy"), { recursive: true });
+    fs.mkdirSync(path.join(home, ".aab"), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, ".workbuddy", "mcp.json"),
+      JSON.stringify({ mcpServers: { aab: { command: "/usr/bin/node", args: ["/tmp/aab.mjs", "mcp"], timeout: 20000, disabled: false } } })
+    );
+    const now = Date.now();
+    const map = {};
+    // 每条记录 = 一次「配置指纹::名字」，改过路径就会多一条
+    grants.forEach((offset, i) => {
+      map[`${String(i).repeat(8)}::aab`] = now + offset;
+    });
+    fs.writeFileSync(path.join(home, ".workbuddy", "mcp-approvals.json"), JSON.stringify(map));
+    // 我方最后一次写入配置的时间 = now
+    fs.writeFileSync(path.join(home, ".aab", "state.json"), JSON.stringify({ workbuddy: { ts: now, hash: "x" } }));
+    return home;
+  };
+  const wbLine = (home) => {
+    const r = spawnSync(NODE, [SB, "doctor"], {
+      encoding: "utf8",
+      timeout: 60000,
+      env: { ...process.env, HOME: home, AAB_LANG: "zh" },
+    });
+    // 「会话来源」段里也有 WorkBuddy 一行，只取宿主段（带 已注册/未注册/信任 的那行）
+    return (r.stdout || "").split("\n").find((l) => l.includes("WorkBuddy") && /已注册|未注册|信任|无法检测/.test(l)) || "";
+  };
+
+  const fresh = wbLine(mk([-600000, 600000])); // 一条更早、一条在写入之后
+  if (/旧配置/.test(fresh)) throw new Error(`仍报旧配置：${fresh.trim()}`);
+  if (!/已信任/.test(fresh)) throw new Error(`没识别到信任：${fresh.trim()}`);
+
+  const stale = wbLine(mk([-600000, -300000])); // 没有任何一条晚于写入
+  if (!/旧配置/.test(stale)) throw new Error(`应报旧配置：${stale.trim()}`);
+
+  return "取最近一条；全都早于写入时才报旧";
 });
 
 check("无效入参的警告跟随语言，且不重复说 ignored", () => {

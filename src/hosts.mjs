@@ -95,13 +95,19 @@ export function approvalState(host) {
   }
   // 只认当前服务名：旧名（pickup / session-bridge）的授权记录不能沿用，
   // 改名后配置指纹变了，WorkBuddy 会要求重信任
-  const hit = Object.keys(map).find((k) => k.endsWith(`::${NAME}`));
+  //
+  // 同一个 server 可能有多条记录——key 是「配置指纹::名字」，改过 MCP 路径就会多一条。
+  // 必须取最近一次（max ts）：早前用 .find() 取第一条，命中旧路径签的那条，
+  // 于是明明已经重信任过，doctor 仍一直报「信任记录对应的是旧配置」。
+  const grants = Object.keys(map)
+    .filter((k) => k.endsWith(`::${NAME}`))
+    .map((k) => Number(map[k]) || 0);
   const legacyHit = Object.keys(map).find((k) => LEGACY.some((n) => k.endsWith(`::${n}`)));
-  if (!hit) return { approved: false, ts: 0, legacyOnly: !!legacyHit };
+  if (!grants.length) return { approved: false, ts: 0, legacyOnly: !!legacyHit };
 
-  // 只报事实：有没有信任记录、什么时候点的。
+  // 只报事实：有没有信任记录、最近一次是什么时候点的。
   // 不去比较配置 mtime——宿主自己也会重写 mcp.json，比出来的是假阳性。
-  return { approved: true, ts: Number(map[hit]) || 0 };
+  return { approved: true, ts: Math.max(...grants), count: grants.length };
 }
 
 /** 我们上次装进去的那条配置的指纹；用来判断"信任之后配置有没有变过" */

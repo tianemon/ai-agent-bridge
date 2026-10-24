@@ -31,10 +31,19 @@ export function resolveNode() {
   return process.execPath;
 }
 
-/** MCP 命令一律写绝对路径：不依赖 PATH，也不依赖这个包有没有发到 npm */
+const PKG = "@tianemon/agent-session-bridge";
+
+/**
+ * 配置里写什么命令，取决于"现在这份代码在哪里被运行"：
+ *   npm i -g / 本地 checkout  → 写那份代码的绝对路径（稳定，改代码即生效）
+ *   npx 缓存（~/.npm/_npx/…）  → 缓存会被清掉，绝不能钉在里面，改用 npx 解析
+ */
 function commandFor() {
   const script = fs.realpathSync(new URL("../bin/pickup.mjs", import.meta.url).pathname);
-  return { command: resolveNode(), args: [script, "mcp"] };
+  if (/[\\/]_npx[\\/]/.test(script)) {
+    return { command: "npx", args: ["-y", PKG, "mcp"], note: "（从 npx 缓存运行，改为让 npx 解析包名）" };
+  }
+  return { command: resolveNode(), args: [script, "mcp"], note: "" };
 }
 
 /** 从 TOML 里摘掉一个段落：标题行到下一个顶层表头之前 */
@@ -173,10 +182,10 @@ export function install({ targets, dryRun = false } = {}) {
   const chosen = targets?.length ? targets.filter((t) => HOSTS[t]) : detected;
   const skipped = Object.keys(HOSTS).filter((h) => !chosen.includes(h));
 
-  const { command, args } = commandFor();
+  const { command, args, note } = commandFor();
   const out = [
     `pickup 安装${dryRun ? "（dry-run，不写任何文件）" : ""}`,
-    `  MCP 命令  ${command} ${args.join(" ")}`,
+    `  MCP 命令  ${command} ${args.join(" ")}${note}`,
     `  探测到    ${detected.length ? detected.map((h) => HOSTS[h].label).join("、") : "（没有已安装的宿主）"}`,
     "",
   ];

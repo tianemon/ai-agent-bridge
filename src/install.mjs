@@ -111,8 +111,11 @@ function applyCodex({ dryRun }) {
 
   // 先把同名/旧名段落都摘掉，再统一追加
   let cleaned = text;
+  let removed = false;
   for (const h of [TOML_HEADER, ...LEGACY.map((k) => `[mcp_servers.${k.replace(/-/g, "_")}]`)]) {
+    const before = cleaned;
     cleaned = dropTomlSection(cleaned, h);
+    if (cleaned !== before) removed = true;
   }
   const lines = cleaned.split("\n");
   const start = lines.findIndex((l) => l.trim() === TOML_HEADER);
@@ -127,13 +130,13 @@ function applyCodex({ dryRun }) {
     }
     next = [...lines.slice(0, start), ...lines.slice(end)].join("\n");
   }
-  if (dryRun) return { ok: true, msg: `将写入 ${file}${cleaned !== text.trimEnd() ? "（替换原有段落）" : ""}` };
+  if (dryRun) return { ok: true, msg: `将写入 ${file}${removed ? "（替换原有段落）" : ""}` };
 
   const bak = backup(file);
   fs.writeFileSync(file, `${next.trimEnd()}\n\n${block}\n`);
   return {
     ok: true,
-    msg: `已写入 ${file}${bak ? `（备份 ${path.basename(bak)}）` : ""}${start >= 0 ? "，替换了原有段落" : ""}`,
+    msg: `已写入 ${file}${bak ? `（备份 ${path.basename(bak)}）` : ""}${removed ? "，替换了原有段落" : ""}`,
   };
 }
 

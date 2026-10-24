@@ -390,6 +390,48 @@ check("AAB_LANG=en 输出英文标签，正文保持原文", () => {
   return "英文标签 + 原文正文";
 });
 
+check("Claude 首次注册：成功后不能报失败（曾经 ReferenceError）", () => {
+  // 用假 HOME + 假 claude CLI，走真实 install 分支。这条路径平时被"本机早已注册"挡住，
+  // 0.1.2 里 applyClaude 引用了未定义的 dropped，成功后反而吐"注册失败"。
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "aab-claude-"));
+  const bin = path.join(home, "bin");
+  fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+  fs.mkdirSync(bin, { recursive: true });
+  const log = path.join(home, "calls.log");
+  fs.writeFileSync(
+    path.join(bin, "claude"),
+    ['#!/bin/sh', 'case "$1 $2" in', '  "mcp list") exit 0 ;;', '  "mcp add") echo "$@" >> "' + log + '"; exit 0 ;;', '  "mcp remove") exit 1 ;;', "esac", "exit 1", ""].join("\n"),
+    { mode: 0o755 }
+  );
+
+  const r = spawnSync(NODE, [SB, "install", "--agent", "claude"], {
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, AAB_LANG: "en" },
+  });
+  const out = r.stdout || "";
+  if (!out.includes("✓")) throw new Error(`没有成功标记：${out.replace(/\n/g, " ").slice(0, 200)}`);
+  if (/registration failed|dropped is not defined/.test(out)) throw new Error(`仍报失败：${out.slice(0, 200)}`);
+  const calls = fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "";
+  if (!calls.includes("--scope user aab")) throw new Error(`没有真的调用 claude mcp add：${calls}`);
+  return "退出码 0，add 已执行，回执为成功";
+});
+
+check("无效入参的警告跟随语言，且不重复说 ignored", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "aab-warn-"));
+  const r = spawnSync(NODE, [SB, "list", "--since", "nonsense"], {
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, HOME: home, AAB_LANG: "en", LANG: "en_US.UTF-8" },
+  });
+  const out = (r.stdout || "") + (r.stderr || "");
+  if (/[\u4e00-\u9fff]/.test(out)) throw new Error(`仍有中文：${out.slice(0, 120)}`);
+  if (!/could not parse since/.test(out)) throw new Error(`没有解析失败提示：${out.slice(0, 120)}`);
+  // 外层已经有 "(ignored: …)"，内层再说一次 ignored 就成了绕圈子
+  if ((out.match(/ignored/gi) || []).length > 1) throw new Error(`ignored 重复：${out.trim()}`);
+  return "英文警告，语义不重复";
+});
+
 check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
   // 唯一允许保留的中文：WorkBuddy 的菜单路径（它的界面就是中文）
   const MENU = "连接器 → 自定义连接器 → aab → 信任";

@@ -95,7 +95,7 @@ function resolveScope({ agent, project, scope }) {
 const agentGuard = (a) =>
   a && a !== "auto" && !isAgent(a) ? tr("cli.badAgent", { a, list: AGENTS.join(" | ") }) : "";
 
-const warningsOf = (w) => (w.length ? tr("cli.ignored", { list: w.join("; ") }) + "\n\n" : "");
+const warningsOf = (w) => (w.length ? tr("cli.ignored", { list: w.join(tr("warn.sep")) }) + "\n\n" : "");
 
 /* ── 动作 ── */
 export async function actLatest(o) {
@@ -159,10 +159,14 @@ export function actList(o) {
     since: input.since,
     limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 15,
   });
-  if (!rows.length) return input.since ? tr("cli.noneRange") : tr("cli.noneAny");
+  if (!rows.length) {
+    return warningsOf(input.warnings) + (input.since ? tr("cli.noneRange") : tr("cli.noneAny"));
+  }
 
   const head = input.since ? tr("cli.listHead", { n: rows.length, after: new Date(input.since).toLocaleString() }) + "\n" : "";
+  // 解析不了的 since/turns 必须说出来：静默忽略会让 --since 退化成"全都要"，用户以为筛过了
   return (
+    warningsOf(input.warnings) +
     head +
     rows
       .map((s) => {
@@ -189,13 +193,16 @@ export async function actGrep(o) {
   const scope = o.scope || "auto";
   const { project: useProject } = resolveScope({ agent: input.agent, project, scope });
   const limit = Number.parseInt(o.limit, 10);
-  return grepSessions({
-    query: q,
-    agent: input.agent,
-    project: useProject,
-    since: input.since,
-    limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 20) : 8,
-  });
+  return (
+    warningsOf(input.warnings) +
+    (await grepSessions({
+      query: q,
+      agent: input.agent,
+      project: useProject,
+      since: input.since,
+      limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 20) : 8,
+    }))
+  );
 }
 
 const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只给够用的那一层

@@ -131,6 +131,10 @@ const DICT = {
 
     "mcp.failed": "失败：{msg}",
     "list.sep": "、",
+    "warn.since": "since「{v}」无法解析",
+    "warn.sep": "；",
+    "warn.turns": "turns「{v}」无法解析",
+    "err.agent": "不支持的会话来源：{agent}",
   },
 
   en: {
@@ -256,6 +260,10 @@ const DICT = {
 
     "mcp.failed": "failed: {msg}",
     "list.sep": ", ",
+    "warn.since": "could not parse since \"{v}\"",
+    "warn.sep": "; ",
+    "warn.turns": "could not parse turns \"{v}\"",
+    "err.agent": "unsupported session source: {agent}",
   },
 };
 

@@ -7,6 +7,8 @@
  * 合并规则：显式参数 > known 里的同名字段；解析不了的字段忽略并回一条 warning。
  */
 
+import { t as tr } from "./i18n.mjs";
+
 const TIME_UNIT = { m: 60_000, h: 3_600_000, d: 86_400_000 };
 
 /** "24h" / "90m" / "7d" / ISO 日期或时间 / 毫秒时间戳 → ms；不认识则 null */
@@ -77,8 +79,8 @@ export function resolveInputs(known, explicit = {}) {
 
   const since = parseSince(pick("since"));
   const turns = parseTurns(pick("turns"));
-  if (pick("since") !== undefined && since === null) warnings.push(`since「${pick("since")}」无法解析，已忽略`);
-  if (pick("turns") !== undefined && turns === null) warnings.push(`turns「${pick("turns")}」无法解析，已忽略`);
+  if (pick("since") !== undefined && since === null) warnings.push(tr("warn.since", { v: pick("since") }));
+  if (pick("turns") !== undefined && turns === null) warnings.push(tr("warn.turns", { v: pick("turns") }));
 
   const agent = pick("agent") && pick("agent") !== "auto" ? String(pick("agent")) : "auto";
 

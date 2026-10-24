@@ -192,7 +192,7 @@ export function install({ targets, dryRun = false } = {}) {
   out.push(
     chosen.length
       ? "下一步：新开一个会话（或重连连接器）后 MCP 才会加载；WorkBuddy 可能还要在连接器页点一次 Trust。"
-      : "没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y agent-pickup mcp`。"
+      : "没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y @tianemon/agent-session-bridge mcp`。"
   );
   return out.join("\n");
 }

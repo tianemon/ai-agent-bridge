@@ -113,7 +113,7 @@ export function doctor() {
   if (missing.length) {
     lines.push(`结论：${missing.map((h) => HOSTS[h].label).join("、")} 已安装但没注册 → 跑 pickup install`);
   } else if (!detected.length) {
-    lines.push("结论：没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y agent-pickup mcp");
+    lines.push("结论：没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y @tianemon/agent-session-bridge mcp");
   } else {
     lines.push("结论：已安装的客户端都已注册。改完配置需新开会话（WorkBuddy 可能还要点一次 Trust）。");
   }

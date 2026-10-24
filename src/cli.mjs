@@ -111,9 +111,8 @@ export async function actLatest(o) {
     : latestSession({ agent: input.agent, project: useProject, since: input.since });
 
   if (!s) {
-    return input.session
-      ? `没找到会话 ${input.session}`
-      : `没有找到${input.agent === "auto" ? "" : (AGENT_LABEL[input.agent] || input.agent) + " "}的会话。`;
+    if (input.session) return `没找到会话 ${input.session}`;
+    return `没有找到${input.agent === "auto" ? "任何" : (AGENT_LABEL[input.agent] || input.agent) + " "}会话。`;
   }
   const loaded = await loadSession(s);
   return (
@@ -210,6 +209,7 @@ const HELP = `pickup —— 从另一个 AI 编码工具的会话接着干，只
   pickup install  [--agent workbuddy,codex,claude] [--dry-run]
                  只给本机确实装了的客户端注册 MCP；不给 --agent 就自动探测
   pickup doctor                                                 诊断：能读到谁、哪个客户端还没挂上
+  pickup agents                                                列出能读哪些工具的会话
   pickup prompt                                                 打印一段可直接粘给任意 agent 的安装指令
   pickup version
 

@@ -31,6 +31,10 @@ export const HOSTS = {
     label: "Claude Code",
     config: "claude mcp (user scope)",
     detect: () => {
+      // 先看有没有配置痕迹再去唤起 claude：它首次运行会自己创建 ~/.claude 与 ~/.claude.json，
+      // 不能因为"探测"就在别人的机器上写东西
+      const home = process.env.CLAUDE_CONFIG_DIR || path.join(HOME, ".claude");
+      if (!fs.existsSync(home) && !fs.existsSync(path.join(HOME, ".claude.json"))) return false;
       try {
         execFileSync("claude", ["mcp", "list"], { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "ignore"] });
         return true;

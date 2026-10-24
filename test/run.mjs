@@ -476,6 +476,24 @@ check("无效入参的警告跟随语言，且不重复说 ignored", () => {
   return "英文警告，语义不重复";
 });
 
+check("rule 输出是可直接粘的片段（### 起，元信息不进 stdout）", () => {
+  for (const lang of ["zh", "en"]) {
+    const r = spawnSync(NODE, [SB, "rule"], {
+      encoding: "utf8",
+      timeout: 30000,
+      env: { ...process.env, AAB_LANG: lang, LANG: "" },
+    });
+    if (r.status !== 0) throw new Error(`${lang}: exit=${r.status} ${r.stderr.slice(0, 120)}`);
+    if (!r.stdout.startsWith("### ")) throw new Error(`${lang}: 不以 ### 开头 → ${r.stdout.slice(0, 40)}`);
+    // 「粘到哪个文件」属于元信息，混进 stdout 就会被一起复制进 CLAUDE.md
+    if (/粘进项目根|paste the text above/i.test(r.stdout)) throw new Error(`${lang}: 元信息混进了 stdout`);
+    if (!/session_latest/.test(r.stdout) || !/rollout-\*\.jsonl/.test(r.stdout)) throw new Error(`${lang}: 缺关键条目`);
+    if (!/agent/.test(r.stdout)) throw new Error(`${lang}: 没提醒点名工具要传 agent`);
+    if (lang === "en" && /[\u4e00-\u9fff]/.test(r.stdout)) throw new Error("en 版含中文");
+  }
+  return "两语均以 ### 起，提示走 stderr";
+});
+
 check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
   // 唯一允许保留的中文：WorkBuddy 的菜单路径（它的界面就是中文）
   const MENU = "连接器 → 自定义连接器 → aab → 信任";
@@ -487,6 +505,7 @@ check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
     ["doctor"],
     ["install", "--dry-run"],
     ["prompt"],
+    ["rule"],
     ["nosuchcmd"],
     ["latest", "--agent", "cursor"],
     ["grep"],

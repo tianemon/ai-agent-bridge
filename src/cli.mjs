@@ -18,6 +18,7 @@ import { grepSessions } from "./grep.mjs";
 import { install } from "./install.mjs";
 import { doctor } from "./doctor.mjs";
 import { prompt } from "./prompt.mjs";
+import { rule } from "./rule.mjs";
 import { VERSION } from "./version.mjs";
 import { t as tr, isZh } from "./i18n.mjs";
 
@@ -228,6 +229,8 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
   aab doctor                                                 诊断：能读到谁、哪个客户端还没挂上
   aab agents                                                 列出能读哪些工具的会话
   aab prompt                                                 打印一段可直接粘给任意 agent 的安装指令
+  aab rule                                                   打印一段常驻规则，粘进项目 CLAUDE.md / AGENTS.md
+                                                              （不粘也能用，但"查看 xx 会话"会时灵时不灵）
   aab version
 
 --known 可传 JSON，让工具不用猜：
@@ -260,6 +263,8 @@ Usage:
   aab doctor                                                 diagnose: what is readable, which host is missing
   aab agents                                                 list which tools can be read
   aab prompt                                                 print an install instruction an agent can follow
+  aab rule                                                   print a standing rule to paste into CLAUDE.md / AGENTS.md
+                                                             (optional, but without it "read the xx session" is hit-or-miss)
   aab version
 
 --known takes JSON so the tool does not have to guess:
@@ -301,6 +306,10 @@ export async function runCli(argv) {
       return doctor();
     case "prompt":
       return prompt();
+    case "rule":
+      // 规则本体走 stdout（可直接复制）；"粘到哪个文件"是元信息，走 stderr，免得被一起粘进去
+      process.stderr.write(tr("rule.hint") + "\n");
+      return rule();
     case "version":
     case "--version":
     case "-v":

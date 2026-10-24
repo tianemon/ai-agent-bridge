@@ -176,6 +176,7 @@ aab latest --turns "around:40±2"         # 第 40 轮前后窗口（默认跨�
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
 aab read --session 53bf411c --level 2
 aab grep "paths-ignore" --agent claude --limit 3
+aab rule                                 # 打印可粘进 CLAUDE.md / AGENTS.md 的常驻规则
 ```
 
 `--known` 接受 JSON，是模型"把已知信息交进来"的方式（工具、项目、会话、轮次区间、时间窗）。
@@ -183,6 +184,21 @@ aab grep "paths-ignore" --agent claude --limit 3
 
 输出语言：`AAB_LANG=zh|en` 可强制指定，否则跟随 `LC_ALL` / `LANG`（默认英文）。会话正文永远不翻译，
 只换周围的标签 —— 上面那段样例就是英文环境下读一份中文会话的真实输出。
+
+### 想稳定命中：`aab rule`
+
+MCP 的 `InitializeResult.instructions` 规范原文是宿主**可以**把它塞进系统提示——可选的。WorkBuddy 实测
+不塞：模型只看到五个裸工具名（还是 deferred，得先检索才读得到描述）。所以描述只能提高概率，
+**只有宿主每个会话都会读的文件才是确定性的**。
+
+```bash
+aab rule        # 打印十行左右的片段；stdout 可直接粘，选哪个文件的提示走 stderr
+```
+
+粘进项目根的 `CLAUDE.md`（WorkBuddy / Claude Code）或 `AGENTS.md`（Codex）。里面按"用户真实说法"列了
+说法 → 调用的对照（「查看 codex 会话」「接着继续做」），以及最要紧的一条：别手解 `rollout-*.jsonl`。
+
+这一步是**可选**的：它改的是你自己仓库的规则文件，而该写哪个文件取决于宿主。
 
 ## 作用域
 

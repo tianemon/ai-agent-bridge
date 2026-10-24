@@ -97,6 +97,8 @@ const DICT = {
     "install.devHint": "提示：当前是【开发目录】运行，配置指向这份源码（改代码即生效）。",
     "install.devHint2": "      正式使用请装安装版：npm i -g @tianemon/ai-agent-bridge@latest && aab install",
     "install.next": "下一步：新开一个会话（或重连连接器）后 MCP 才会加载。",
+    "rule.hint": "（把上面的内容粘进项目根的 CLAUDE.md 或 AGENTS.md；WorkBuddy/Claude Code 读 CLAUDE.md，Codex 读 AGENTS.md）",
+    "install.rule": "想让 agent 稳定地「查看/接着某工具的会话」，再跑 aab rule，把输出粘进项目根的 CLAUDE.md / AGENTS.md。",
     "install.note.npx": "（从 npx 缓存运行，改为让 npx 解析包名）",
     "install.m.notJson": "{file} 不是合法 JSON（{err}），未改动",
     "install.m.current": "已是当前配置，跳过（{file}）",
@@ -226,6 +228,9 @@ const DICT = {
     "install.devHint": "Note: running from a dev checkout — the config points at this source tree (edits take effect immediately).",
     "install.devHint2": "      For production, install the package: npm i -g @tianemon/ai-agent-bridge@latest && aab install",
     "install.next": "Next: open a new session (or reconnect the connector) — the MCP server loads after that.",
+    "rule.hint": "(paste the text above into the project's CLAUDE.md or AGENTS.md — WorkBuddy/Claude Code read CLAUDE.md, Codex reads AGENTS.md)",
+    "install.rule":
+      'For reliable "read / continue the xx session" triggering, run `aab rule` and paste the output into the project\'s CLAUDE.md / AGENTS.md.',
     "install.note.npx": " (running from the npx cache; letting npx resolve the package name instead)",
     "install.m.notJson": "{file} is not valid JSON ({err}); nothing changed",
     "install.m.current": "already up to date, skipped ({file})",

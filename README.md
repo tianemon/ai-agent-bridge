@@ -194,6 +194,7 @@ aab latest --turns "around:40±2"         # window around turn 40 (default span 
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
 aab read --session 53bf411c --level 2
 aab grep "paths-ignore" --agent claude --limit 3
+aab rule                                 # standing rule to paste into CLAUDE.md / AGENTS.md
 ```
 
 `--known` accepts JSON and is how a model hands over what it already knows (tool, project, session,
@@ -202,6 +203,23 @@ turn range, time window). Explicit flags win over `known` fields. In MCP the sam
 
 Output language: `AAB_LANG=en|zh` overrides, otherwise it follows `LC_ALL` / `LANG`. Conversation
 content is never translated — only the surrounding labels change.
+
+### Make it deterministic: `aab rule`
+
+MCP's `InitializeResult.instructions` is specified as something the host *may* put into the system
+prompt — optional. WorkBuddy does not, in practice: the model sees five bare tool names (deferred, so it
+has to search before it can even read the descriptions). Descriptions raise the odds of a hit; only a file
+the host reads every session makes it certain.
+
+```bash
+aab rule        # prints a 10-line section; stdout is paste-ready, the "which file" hint goes to stderr
+```
+
+Paste it into the project's `CLAUDE.md` (WorkBuddy, Claude Code) or `AGENTS.md` (Codex). It lists the
+phrasings people actually use — "查看 codex 会话", "接着继续做", "read the codex session" — against the call
+to make, and the one rule that matters most: do not hand-parse `rollout-*.jsonl`.
+
+This is opt-in on purpose: it edits *your* repo's rule file, and which file applies depends on the host.
 
 ## Scope
 

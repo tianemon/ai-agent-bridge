@@ -265,5 +265,6 @@ export function install({ targets, dryRun = false } = {}) {
     out.push(tr("install.devHint2"));
   }
   out.push(tr("install.next"));
+  out.push(tr("install.rule"));
   return out.join("\n");
 }

@@ -26,10 +26,14 @@ const TOOL_LIST = "codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy";
  */
 const INSTRUCTIONS = [
   `aab reads another AI coding tool's session (${TOOL_LIST}) — newest conclusion first, deeper only if needed. `,
-  'Trigger it whenever the user says "read the latest codex session", "where did claude get to", ',
-  '"pick up what the other tool was doing" — 中文：「读一下 codex 最新会话」「claude 那边做到哪了」',
-  '「接着上一个工具的活干」— call session_latest. Default level=1 (~120 tokens); raise the level only ',
-  "if it is not enough, and anchor with turns when you already know which turns you need. ",
+  // 触发词按"用户真实说法"列，不按工具语义列：实测中文查询里「查看/接着/继续」这类动词，
+  // 与「会话/对话/记录」这类名词是模型发起检索时唯一会用到的字面，少一个就搜不到。
+  "中文触发（命中任一即用 session_latest）：查看/读取/看看/翻一下/查一下 <工具名> 的会话、对话、聊天记录、历史；",
+  "接着/继续 <工具名> 最新会话 做下去；继续上一个会话；<工具名> 那边做到哪了、干到哪了；接手之前的活。",
+  'English triggers: "read the latest codex session", "where did claude get to", ',
+  '"pick up what the other tool was doing", "continue where codex left off". ',
+  "Default level=1 (~120 tokens); raise the level only if it is not enough, and anchor with turns when you ",
+  "already know which turns you need. If the user names a tool, pass agent=<that tool>; do not leave it auto. ",
   "Do not parse rollout-*.jsonl or session sqlite by hand — one thread can exceed 50 MB and will blow up ",
   "the context. If aab doctor reports WorkBuddy as untrusted, tell the user to click ",
   "连接器 → 自定义连接器 → aab → 信任 (Connectors → Custom connectors → aab → Trust) — only a human can do that.",
@@ -53,13 +57,14 @@ const TOOLS = [
   {
     name: "session_latest",
     description:
-      `Read another AI coding tool's session (${TOOL_LIST}) starting from the newest conclusion. ` +
+      `Read / 查看 another AI coding tool's session (${TOOL_LIST}) — 「查看 codex 会话」「读取 claude 的对话」` +
+      `「看看 codex 那边做到哪了」「接着 codex 最新会话继续做」「继续上一个会话」「接手之前的活」都走这个。` +
       'Use this for "read the latest codex session", "where did claude get to", "pick up what the other tool ' +
-      'was doing"（中文：「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」）. ' +
+      'was doing", "continue where codex left off". ' +
       "level=1 (default) returns only the final conclusion, the cheapest possible answer; escalate only if " +
       "needed: 2 = last 3 turns, 3 = requirement timeline, 4 = commands/files/git state. Every reply ends with " +
-      "the token cost of the next level. If you already know the project/session/turns, pass them — anchoring " +
-      "beats guessing.",
+      "the token cost of the next level. If the user names a tool, pass agent=<tool> instead of leaving it auto; " +
+      "if you already know the session/turns, pass them — anchoring beats guessing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -97,9 +102,10 @@ const TOOLS = [
   {
     name: "session_list",
     description:
-      `List recent sessions across ${TOOL_LIST} (time, tool, project, id, size; multi-segment threads are ` +
-      "marked). Use it when you are not sure which session is the newest, or want to see what has been running " +
-      "in a project recently. 中文：不确定「最新那个」是哪一次时先用它。",
+      `List / 列出 recent sessions across ${TOOL_LIST} (time, tool, project, id, size; multi-segment threads ` +
+      "are marked). 中文：不确定「最新那个」是哪一次、想看最近跑过什么时先用它——" +
+      "「看看最近的 codex 会话」「我这几天跑了哪些会话」「哪个会话还在跑」。Use it when you are not sure which " +
+      "session is the newest, or want to see what has been running in a project recently.",
     inputSchema: {
       type: "object",
       properties: {
@@ -116,8 +122,8 @@ const TOOLS = [
     name: "session_read",
     description:
       `Read one specific session (by id prefix) from ${TOOL_LIST}, with the same level / turns controls. ` +
-      "Use it when you already know which session it is, or after session_latest gave you an id. " +
-      "中文：已知具体是哪次会话时用这个。",
+      "中文：已知是哪一次会话（有 id 或前缀）时用；或先 list/latest 拿到 id 再来读指定会话。" +
+      "Use it when you already know which session it is, or after session_latest gave you an id.",
     inputSchema: {
       type: "object",
       properties: {
@@ -134,10 +140,9 @@ const TOOLS = [
   {
     name: "session_grep",
     description:
-      `Keyword search inside recent sessions of ${TOOL_LIST} — up to 480 characters per hit, 8 hits by ` +
-      "default; reasoning blocks are never searched. Use it only when the level ladder is not enough and you " +
-      "need one specific detail; do not use it to dump a whole conversation. " +
-      "中文：只在前面的 level 都不够、要确认某个具体细节时用。",
+      `Keyword search / 搜索 inside recent sessions of ${TOOL_LIST} — up to 480 characters per hit, 8 hits by ` +
+      "default; reasoning blocks are never searched. 中文：只在前面的 level 都不够、要确认某个具体细节时用" +
+      "（「那个会话里提过 X 吗」「搜一下报错原文」），别用它整篇导出会话。",
     inputSchema: {
       type: "object",
       properties: {
@@ -156,7 +161,7 @@ const TOOLS = [
     name: "session_agents",
     description:
       "List the tools whose sessions can be read on this machine, with their data directories — useful to " +
-      "diagnose why one tool returns nothing.",
+      "diagnose why one tool returns nothing. 中文：排查「为什么读不到某个工具的会话」时用。",
     inputSchema: { type: "object", properties: {} },
   },
 ];

@@ -7,6 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
 import { HOSTS, detectHosts, registered, approvalState, trustStale, NAME } from "./hosts.mjs";
+import { t as tr } from "./i18n.mjs";
 import { resolveNode, runtimeMode } from "./install.mjs";
 
 const existsDir = (p) => {
@@ -18,10 +19,10 @@ const existsDir = (p) => {
 };
 
 const ago = (ms) => {
-  if (!ms) return "无";
+  if (!ms) return tr("ago.none");
   const h = Math.round((Date.now() - ms) / 3600000);
-  if (h >= 24) return `${Math.round(h / 24)} 天前`;
-  return h >= 1 ? `${h} 小时前` : "刚刚";
+  if (h >= 24) return tr("ago.days", { n: Math.round(h / 24) });
+  return h >= 1 ? tr("ago.hours", { n: h }) : tr("ago.now");
 };
 
 function tryRun(cmd, args) {
@@ -59,18 +60,19 @@ function staleEntry(host) {
 
 export function doctor() {
   const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
-  const lines = ["■ 运行时"];
+  const lines = [tr("doc.runtime")];
   lines.push(`  node    ${process.version}  ${process.execPath}`);
   const stable = resolveNode();
-  if (stable !== process.execPath) lines.push(`          （这是宿主自带的 node；写进配置时会改用 ${stable}）`);
+  if (stable !== process.execPath) lines.push(`          ${tr("doc.node.hint", { node: stable })}`);
   lines.push(`  script  ${script}`);
   const rm = runtimeMode(script);
-  lines.push(`  mode    ${rm.mode}${rm.dev ? "（开发态：配置指向源码，正式使用应装 npm 版）" : "（正式安装）"}`);
+  const modeLabel = rm.mode === "npx 缓存" ? tr("doc.mode.npx") : rm.dev ? tr("doc.mode.dev") : tr("doc.mode.installed");
+  lines.push(`  mode    ${modeLabel}`);
   const onPath = tryRun("which", ["aab"]);
-  lines.push(`  PATH    ${onPath ? `aab → ${onPath}` : "未装到 PATH（npx / 绝对路径调用不受影响）"}`);
+  lines.push(`  PATH    ${onPath ? `aab → ${onPath}` : tr("doc.path.missing")}`);
   lines.push("");
 
-  lines.push("■ 会话来源（能读谁的会话）");
+  lines.push(tr("doc.sources"));
   for (const name of AGENTS) {
     let root = "";
     try {
@@ -79,17 +81,17 @@ export function doctor() {
       /* 环境变量坏了也不该让诊断崩 */
     }
     if (!root || !existsDir(root)) {
-      lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✗ 目录不存在  ${root || "(未知)"}`);
+      lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✗ ${tr("doc.missingDir")}  ${root || "(?)"}`);
       continue;
     }
     const rows = indexAll(name);
     const latest = rows.reduce((m, r) => Math.max(m, r.mtimeMs || 0), 0);
-    lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✓ ${String(rows.length).padStart(3)} 个会话，最近 ${ago(latest)}`);
+    lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✓ ${tr("doc.sessions", { n: rows.length, ago: ago(latest) })}`);
     lines.push(`               ${root}`);
   }
   lines.push("");
 
-  lines.push("■ 宿主（哪个客户端挂了 MCP）");
+  lines.push(tr("doc.hosts"));
   const detected = detectHosts();
   for (const [name, host] of Object.entries(HOSTS)) {
     if (!detected.includes(name)) {
@@ -121,23 +123,19 @@ export function doctor() {
   }
   lines.push("");
 
-  lines.push("■ 当前作用域");
+  lines.push(tr("doc.scope"));
   lines.push(`  cwd     ${process.cwd()}`);
   lines.push("          （默认按 cwd 所在项目过滤；子目录会归到 git 根；不像项目目录时才全机）");
   lines.push("");
 
   const missing = detected.filter((h) => registered(h) === false);
   if (missing.length) {
-    lines.push(`结论：${missing.map((h) => HOSTS[h].label).join("、")} 已安装但没注册 → 跑 aab install`);
+    lines.push(tr("doc.conclusion") + tr("doc.c.needInstall", { hosts: missing.map((h) => HOSTS[h].label).join(", ") }));
   } else if (!detected.length) {
-    lines.push("结论：没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y @tianemon/ai-agent-bridge mcp");
+    lines.push(tr("doc.conclusion") + tr("doc.c.none"));
   } else {
     const wbUntrusted = detected.includes("workbuddy") && registered("workbuddy") && !approvalState("workbuddy").approved;
-    lines.push(
-      wbUntrusted
-        ? "结论：配置都写好了，但 WorkBuddy 还没点信任 → 连接器 → 自定义连接器 → aab → 信任（点完新开会话）"
-        : "结论：已安装的客户端都已注册。改完配置需新开会话（WorkBuddy 可能还要点一次 Trust）。"
-    );
+    lines.push(tr("doc.conclusion") + tr(wbUntrusted ? "doc.c.untrusted" : "doc.c.ok"));
   }
   return lines.join("\n");
 }

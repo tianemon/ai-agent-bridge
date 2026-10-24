@@ -19,7 +19,13 @@ const results = [];
 
 function run(args, cwd = os.homedir()) {
   const t0 = Date.now();
-  const r = spawnSync(NODE, [SB, ...args], { cwd, encoding: "utf8", timeout: 60000 });
+  // 断言以中文为基准（与历史输出一致），语言相关行为单独用 case 验
+  const r = spawnSync(NODE, [SB, ...args], {
+    cwd,
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, AAB_LANG: "zh" },
+  });
   return { out: r.stdout || "", err: r.stderr || "", code: r.status, ms: Date.now() - t0 };
 }
 
@@ -285,8 +291,8 @@ check("level=1 未收尾时给出上一轮结论", () => {
     turns: [t(1, "做A", ["A 完成"]), t(2, "做B", ["B 完成"]), t(3, "做C", [], ["还在做 C"])],
   };
   const l1 = buildLevels(s)[0];
-  if (!l1.title.includes("未收尾")) throw new Error(`标题异常: ${l1.title}`);
-  if (!l1.body.includes("退路：最近一条结论在第 2 轮")) throw new Error("没有给出退路");
+  if (!/未收尾|unfinished/.test(l1.title)) throw new Error(`标题异常: ${l1.title}`);
+  if (!/(退路|fallback)/.test(l1.body) || !/(第 2 轮|turn 2)/.test(l1.body)) throw new Error("没有给出退路");
   return "退路指向第 2 轮";
 });
 
@@ -336,9 +342,9 @@ check("from: 渲染到最后一轮，around: 渲染前后窗口", () => {
     turns: Array.from({ length: 10 }, (_, k) => t(k + 1, `需求${k + 1}`, [`结论${k + 1}`])),
   };
   const from = renderTurns(s, parseTurns("from:8"));
-  if (!from.includes("【第 8-10 轮")) throw new Error(`from: 渲染错：${from.slice(0, 60)}`);
+  if (!/(第 )?8-10/.test(from)) throw new Error(`from: 渲染错：${from.slice(0, 60)}`);
   const around = renderTurns(s, parseTurns("around:5±1"));
-  if (!around.includes("【第 4-6 轮")) throw new Error(`around: 渲染错：${around.slice(0, 60)}`);
+  if (!/(第 )?4-6/.test(around)) throw new Error(`around: 渲染错：${around.slice(0, 60)}`);
   return "from:8 → 8-10，around:5±1 → 4-6";
 });
 
@@ -361,6 +367,19 @@ check("findSession 取最近活动的那个（同前缀不误选）", () => {
   const hit = rows.find((r) => r.id.startsWith("01a1"));
   if (hit.id !== "01a1bbbb") throw new Error("未按 mtime 取最新");
   return "按最近活动命中";
+});
+
+check("AAB_LANG=en 输出英文标签，正文保持原文", () => {
+  const r = spawnSync(NODE, [SB, "latest", "--agent", "codex", "--level", "1"], {
+    encoding: "utf8",
+    env: { ...process.env, AAB_LANG: "en", LANG: "en_US.UTF-8" },
+    timeout: 60000,
+  });
+  if (r.status !== 0) throw new Error(r.stderr.slice(0, 120));
+  if (!r.stdout.includes("【level 1 ·")) throw new Error("level 头缺失");
+  if (!/latest conclusion|latest progress/.test(r.stdout)) throw new Error("标题未英文化");
+  if (!/turns? ·/.test(r.stdout) && !r.stdout.includes("turns")) throw new Error("轮次信息未英文化");
+  return "英文标签 + 原文正文";
 });
 
 check("未知工具被拒绝，不静默降级", () => {
@@ -432,7 +451,7 @@ check("install --agent 未知宿主给提示", () => {
 /* ── MCP ── */
 function mcpRoundtrip(payloads, waitMs = 3500, cwd = os.homedir()) {
   return new Promise((resolve) => {
-    const p = spawn(NODE, [SB, "mcp"], { cwd });
+    const p = spawn(NODE, [SB, "mcp"], { cwd, env: { ...process.env, AAB_LANG: "zh" } });
     let out = "";
     p.stdout.on("data", (d) => (out += d));
     for (const x of payloads) p.stdin.write(JSON.stringify(x) + "\n");
@@ -538,7 +557,7 @@ await mcpCheck("未知方法回 -32601", async () => {
 });
 
 await mcpCheck("坏 JSON 行之后仍能响应", async () => {
-  const p = spawn(NODE, [SB, "mcp"], { cwd: os.homedir() });
+  const p = spawn(NODE, [SB, "mcp"], { cwd: os.homedir(), env: { ...process.env, AAB_LANG: "zh" } });
   let out = "";
   p.stdout.on("data", (d) => (out += d));
   p.stdin.write("{这不是json}\n");

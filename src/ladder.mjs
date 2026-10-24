@@ -2,10 +2,12 @@
  * 输出层：默认只给"最新一条结论"，不够再往上要一层；
  * 调用方若已经知道要哪几轮，就用 turns 直接跳过去。
  *
- * 每层都自带「下一层要花多少 token」，让调用方自己决定停在哪。
+ * 每层都自带「下一层要花多少 token」，让调用方决定停在哪。
+ * 文案走 i18n（AAB_LANG / LANG），默认英文。
  */
 import { execFileSync } from "node:child_process";
 import { AGENT_LABEL } from "./registry.mjs";
+import { t as tr } from "./i18n.mjs";
 
 const tok = (s) => Math.ceil([...String(s)].length / 2.2);
 
@@ -21,7 +23,7 @@ function clip(s, max) {
   const tail = max - head;
   return (
     arr.slice(0, head).join("") +
-    `\n…（截断 ${arr.length - max} 字）…\n` +
+    "\n" + tr("common.truncated", { n: arr.length - max }) + "\n" +
     arr.slice(arr.length - tail).join("")
   );
 }
@@ -56,7 +58,7 @@ function gitSnapshot(cwd, sessionFiles) {
   const st = run(["status", "--short"]);
   if (!log && !st) return "";
   const lines = [];
-  if (log) lines.push("最近提交：", ...log.split("\n").map((l) => "  " + l));
+  if (log) lines.push(tr("l4.commits"), ...log.split("\n").map((l) => "  " + l));
   if (st) {
     const rows = st.split("\n").filter(Boolean);
     // 工作区是"整个仓库此刻的状态"，不一定都是这个会话改的：
@@ -66,13 +68,10 @@ function gitSnapshot(cwd, sessionFiles) {
       const p = r.slice(3).trim();
       return touched.has(p) || [...touched].some((f) => f.endsWith("/" + p) || p.endsWith("/" + f));
     });
-    lines.push(
-      `工作区未提交（${rows.length} 项，整个仓库的当前状态）`,
-      `  其中与本会话改动文件重合 ${mine.length} 项，其余可能来自其它工具/其它会话`
-    );
+    lines.push(tr("l4.dirty", { n: rows.length }), tr("l4.dirty.overlap", { n: mine.length }));
     const ordered = [...mine, ...rows.filter((r) => !mine.includes(r))];
     lines.push(...ordered.slice(0, 20).map((l) => "  " + l));
-    if (rows.length > 20) lines.push(`  …还有 ${rows.length - 20} 项`);
+    if (rows.length > 20) lines.push(tr("l4.more", { n: rows.length - 20 }));
   }
   return lines.join("\n");
 }
@@ -81,11 +80,15 @@ const finalOf = (t) => (t.finals.length ? t.finals[t.finals.length - 1] : t.narr
 
 function header(s) {
   const label = AGENT_LABEL[s.agent] || s.agent;
-  const segs = s.files.length > 1 ? ` · 续跑 ${s.files.length} 段` : "";
+  const segs = s.files.length > 1 ? tr("hdr.segs", { n: s.files.length }) : "";
   const model = s.model ? ` · ${s.model}` : "";
   return [
     `■ ${label} · ${fmtTime(s.mtimeMs)}${segs}${model}`,
-    `  会话 ${String(s.id).slice(0, 18)} · 共 ${s.turns.length} 轮需求 · ${s.cwd || "路径未知"}`,
+    tr("hdr.meta", {
+      id: String(s.id).slice(0, 18),
+      n: s.turns.length,
+      cwd: s.cwd || tr("hdr.unknownPath"),
+    }),
   ].join("\n");
 }
 
@@ -99,13 +102,14 @@ export function buildLevels(s) {
   {
     const settled = !!last?.finals.length;
     const body = last
-      ? `第 ${last.i} 轮 · 用户问：${oneLine(last.user, 160)}\n\n${
-          settled
-            ? clip(finalOf(last), 4200)
-            : "（该轮没有收尾结论——会话可能中断、仍在运行，或最后一条只是进展旁白）\n\n" +
-              clip(finalOf(last) || "（该轮没有任何文本输出）", 4200)
-        }`
-      : "（这个会话里没有解析到对话内容）";
+      ? tr("l1.ask", { i: last.i, q: oneLine(last.user, 160) }) +
+        "\n\n" +
+        (settled
+          ? clip(finalOf(last), 4200)
+          : tr("l1.note.pending") +
+            "\n\n" +
+            clip(finalOf(last) || tr("l1.note.empty"), 4200))
+      : tr("l1.empty");
 
     // 未收尾时给一条退路：直接附上最近一条有结论的轮次，免得为了看一眼上一轮再调一次 level=2
     let fallback = "";
@@ -113,10 +117,14 @@ export function buildLevels(s) {
       const prev = [...turns].reverse().find((t) => t.i !== last.i && t.finals.length);
       if (prev) {
         const tail = clip(finalOf(prev), 600);
-        fallback = `\n\n── 退路：最近一条结论在第 ${prev.i} 轮（约 +${tok(tail)} token）──\n${tail}`;
+        fallback = tr("l1.fallback", { i: prev.i, tok: tok(tail), txt: tail });
       }
     }
-    levels.push({ level: 1, title: settled ? "最新一条结论" : "最新进展（未收尾）", body: body + fallback });
+    levels.push({
+      level: 1,
+      title: settled ? tr("l1.title.ok") : tr("l1.title.pending"),
+      body: body + fallback,
+    });
   }
 
   // L2 最近 3 轮
@@ -124,12 +132,12 @@ export function buildLevels(s) {
     const pick = turns.slice(-3);
     const body = pick
       .map((t) => {
-        const q = clip(oneLine(t.user, 300), 300) || "（无用户输入，可能由应用侧自动发起）";
-        const a = clip(finalOf(t) || "（无文本结论）", 900);
-        return `── 第 ${t.i} 轮 ──\n问：${q}\n论：${a}`;
+        const q = clip(oneLine(t.user, 300), 300) || tr("l2.noUser");
+        const a = clip(finalOf(t) || tr("l2.noFinal"), 900);
+        return tr("l2.turn", { i: t.i, q, a });
       })
       .join("\n\n");
-    levels.push({ level: 2, title: `最近 ${pick.length} 轮问答`, body });
+    levels.push({ level: 2, title: tr("l2.title", { n: pick.length }), body });
   }
 
   // L3 需求时间线
@@ -139,21 +147,21 @@ export function buildLevels(s) {
       return `${mark}${String(t.i).padStart(2, " ")}. ${oneLine(t.user, 110)}`;
     });
     // 一个会话可能被压缩多次（claude 实测单会话最多 11 次），只取最近两条
-    const comps = (s.compaction || []).slice(-2);
+    const all = s.compaction || [];
+    const comps = all.slice(-2);
     const comp = comps.length
       ? "\n\n" +
         comps
-          .map(
-            (c, i) =>
-              `[压缩摘要 ${i + 1}/${comps.length}${
-                (s.compaction || []).length > comps.length
-                  ? `（会话共被压缩 ${(s.compaction || []).length} 次，此处只取最近 ${comps.length} 次）`
-                  : ""
-              }]\n` + clip(c, 1600)
+          .map((c, i) =>
+            tr("l3.comp", {
+              i: i + 1,
+              n: comps.length,
+              extra: all.length > comps.length ? tr("l3.comp.extra", { total: all.length, n: comps.length }) : "",
+            }) + "\n" + clip(c, 1600)
           )
           .join("\n\n")
       : "";
-    levels.push({ level: 3, title: "全部需求时间线", body: lines.join("\n") + comp });
+    levels.push({ level: 3, title: tr("l3.title"), body: lines.join("\n") + comp });
   }
 
   // L4 工具 / 文件 / git
@@ -170,18 +178,18 @@ export function buildLevels(s) {
     }
     const top = [...files.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40);
     const body = [
-      `改动过的文件（整段会话 ${turns.length} 轮累计，共 ${files.size} 个，按出现次数）`,
+      tr("l4.files", { turns: turns.length, files: files.size }),
       ...top.map(([f, n]) => `  ${n}× ${f}`),
       "",
-      `命令（${cmds.length} 条，取最后 15 条）`,
+      tr("l4.cmds", { n: cmds.length }),
       ...cmds.slice(-15).map((c) => "  $ " + oneLine(c, 150)),
       "",
-      `工具调用（${tools.size} 种）`,
+      tr("l4.tools", { n: tools.size }),
       ...[...tools.keys()].slice(0, 20).map((k) => "  - " + k),
       "",
       gitSnapshot(s.cwd, [...files.keys()]),
     ].join("\n");
-    levels.push({ level: 4, title: "命令 / 文件 / git 状态", body });
+    levels.push({ level: 4, title: tr("l4.title"), body });
   }
 
   return levels;
@@ -190,7 +198,7 @@ export function buildLevels(s) {
 /** 指定轮次区间：调用方已经知道要看哪几轮时用它，比逐层加码省一轮往返 */
 export function renderTurns(s, turns, { maxChars = 9000 } = {}) {
   const total = s.turns.length;
-  if (!total) return "（这个会话里没有解析到对话内容）";
+  if (!total) return tr("l1.empty");
   let from;
   let to;
   if (turns.last) {
@@ -205,31 +213,21 @@ export function renderTurns(s, turns, { maxChars = 9000 } = {}) {
     // from: 只给起点 → 一直到最后；区间越界则夹到总轮数
     to = Math.min(total, turns.to ?? total);
   }
-  if (from > to) {
-    return `轮次区间无效：${from}-${to}（会话共 ${total} 轮）`;
-  }
+  if (from > to) return tr("rng.bad", { from, to, total });
   const picked = s.turns.filter((t) => t.i >= from && t.i <= to);
-  if (!picked.length) return `会话里没有第 ${from}-${to} 轮（共 ${total} 轮）`;
+  if (!picked.length) return tr("rng.none", { from, to, total });
 
   const body = picked
-    .map(
-      (t) =>
-        `── 第 ${t.i} 轮 ──\n问：${clip(oneLine(t.user, 600), 600) || "（无用户输入）"}\n论：${clip(
-          finalOf(t) || "（该轮无文本结论）",
-          1200
-        )}`
+    .map((t) =>
+      tr("l2.turn", {
+        i: t.i,
+        q: clip(oneLine(t.user, 600), 600) || tr("l2.noUser"),
+        a: clip(finalOf(t) || tr("l2.noFinal"), 1200),
+      })
     )
     .join("\n\n");
 
-  const out = [
-    header(s),
-    "",
-    `【第 ${from}-${to} 轮 · 共 ${total} 轮】`,
-    clip(body, maxChars),
-    "",
-    `（按需指定区间；不给 turns 时走 level 阶梯，从最新结论开始）`,
-  ];
-  return out.join("\n");
+  return [header(s), "", tr("rng.head", { from, to, total }), clip(body, maxChars), "", tr("rng.hint")].join("\n");
 }
 
 /** 拼成最终文本 */
@@ -242,16 +240,16 @@ export function render(s, opts = {}) {
   const budget = clampInt(opts.maxChars, 200, 20000, want === 1 ? 4200 : 9000);
   const body = clip(hit.body, budget);
 
-  const parts = [header(s), "", `【level ${want} · ${hit.title}】`, body];
+  const parts = [header(s), "", tr("lv.head", { n: want, title: hit.title }), body];
 
   if (want < levels.length) {
-    parts.push("", "── 信息不够就再要一层（同一会话再调一次，加 level）──");
+    parts.push("", tr("next.banner"));
     for (const n of levels.slice(want)) {
-      parts.push(`  level=${n.level}  ${n.title}  ≈ +${tok(clip(n.body, 9000))} token`);
+      parts.push(tr("next.cost", { n: n.level, title: n.title, tok: tok(clip(n.body, 9000)) }));
     }
-    parts.push(`  当前 level=${want}，全文约 ${tok(body)} token`);
+    parts.push(tr("next.current", { n: want, tok: tok(body) }));
   } else {
-    parts.push("", "── 已是最大粒度；再要原文请用 session_grep 指定关键词 ──");
+    parts.push("", tr("next.maxed"));
   }
   return parts.join("\n");
 }

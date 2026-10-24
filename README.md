@@ -8,23 +8,31 @@ Switch from Codex to Claude Code, or from Claude Code to any MCP-capable agent, 
 previous tool left off — without stuffing a 30 MB transcript into the context window.
 
 ```
-■ Codex · 2026-10-23 21:59 · 续跑 2 段 · gpt-6.1-sol
-  会话 01a16729-0aed-7012 · 共 41 轮需求 · /Users/amon/dev/project/EasyMint
+■ Codex · 2026-10-24 11:43 · 4 segments · gpt-6.1-sol
+  session 01a16729-0aed-7012 · 67 turns · /Users/amon/dev/project/EasyMint
 
-【level 1 · 最新进展（未收尾）】
-第 41 轮 · 用户问：按我理解，这应该就是大概的样子…确认明白就开始实现
-（该轮没有收尾结论——会话可能中断、仍在运行，或最后一条只是进展旁白）
-正式界面中已确认：组件/布局切换、Web/移动端切换、配色、效果和放大预览入口都在…
+【level 1 · latest conclusion】
+turn 67 · asked: 优化一下图标细节，房子图标不标准，播放图标三角形没有居中等等
 
-── 信息不够就再要一层（同一会话再调一次，加 level）──
-  level=2  最近 3 轮问答  ≈ +288 token
-  level=3  全部需求时间线  ≈ +962 token
-  level=4  命令 / 文件 / git 状态  ≈ +2836 token
+已优化：
+- 重画房屋图标，修正屋顶、墙体和门洞。
+- 修复播放图标在紧凑模式和迷你播放器中的偏移，播放／暂停切换保持居中。
+- 调整广播、收藏、下一曲和更多图标的轮廓与线宽。
+已实测居中，27 项相关测试及构建通过。
+
+── not enough? ask for one more level (same session, higher level) ──
+  level=2  last 3 turns  ≈ +370 token
+  level=3  full requirement timeline  ≈ +1601 token
+  level=4  commands / files / git state  ≈ +2944 token
+  currently level=1, this output ≈ 120 token
 ```
 
-Above: 101 tokens instead of the session's ~9M. The caller decides when to stop, because every layer
-reports what the next one costs. (The tool's own output strings are Chinese for now; the sample above
-is verbatim output, not a translation.)
+120 tokens instead of the session's ~9M. The caller decides when to stop, because every layer reports
+what the next one costs.
+
+**Labels follow your locale** (`AAB_LANG` / `LC_ALL` / `LANG`; English by default) — the conversation
+text itself is always reproduced verbatim in whatever language it was written. The sample above is real
+output from an English-locale machine reading a Chinese session.
 
 ## Why
 
@@ -191,6 +199,9 @@ aab grep "paths-ignore" --agent claude --limit 3
 `--known` accepts JSON and is how a model hands over what it already knows (tool, project, session,
 turn range, time window). Explicit flags win over `known` fields. In MCP the same knobs are
 `known` and `maxChars`.
+
+Output language: `AAB_LANG=en|zh` overrides, otherwise it follows `LC_ALL` / `LANG`. Conversation
+content is never translated — only the surrounding labels change.
 
 ## Scope
 

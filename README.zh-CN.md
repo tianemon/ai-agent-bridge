@@ -181,6 +181,9 @@ aab grep "paths-ignore" --agent claude --limit 3
 `--known` 接受 JSON，是模型"把已知信息交进来"的方式（工具、项目、会话、轮次区间、时间窗）。
 显式参数优先于 `known` 里的同名字段。MCP 侧对应的旋钮是 `known` 与 `maxChars`。
 
+输出语言：`AAB_LANG=zh|en` 可强制指定，否则跟随 `LC_ALL` / `LANG`（默认英文）。会话正文永远不翻译，
+只换周围的标签 —— 上面那段样例就是英文环境下读一份中文会话的真实输出。
+
 ## 作用域
 
 默认是**本项目**：工作目录，归到它的 git 根。用 `--scope` 调整：

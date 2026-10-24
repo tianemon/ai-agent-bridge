@@ -1,6 +1,6 @@
 {
   "name": "@tianemon/ai-agent-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Read another AI coding tool's session — newest conclusion first, escalate only as far as you need.",
   "type": "module",
   "bin": {

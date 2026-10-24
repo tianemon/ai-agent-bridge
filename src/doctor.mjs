@@ -95,28 +95,29 @@ export function doctor() {
   const detected = detectHosts();
   for (const [name, host] of Object.entries(HOSTS)) {
     if (!detected.includes(name)) {
-      lines.push(`  ${host.label.padEnd(12)} – 未安装，不处理`);
+      lines.push(`  ${host.label.padEnd(12)} – ${tr("doc.st.untrusted")}`);
       continue;
     }
     const reg = registered(name);
     const bad = reg && staleEntry(name);
     let status;
-    if (reg === null) status = "? 无法检测";
-    else if (bad) status = "⚠ 已注册但脚本路径不存在";
-    else if (!reg) status = "✗ 未注册";
-    else status = "✓ 已注册";
+    if (reg === null) status = "? " + tr("doc.st.unknown");
+    else if (bad) status = "⚠ " + tr("doc.st.stale");
+    else if (!reg) status = "✗ " + tr("doc.st.missing");
+    else status = "✓ " + tr("doc.st.registered");
 
     // WorkBuddy 还有一道人工闸：写进配置之后要点一次信任，MCP 才会真的加载
     if (reg && name === "workbuddy") {
       const a = approvalState(name);
       if (!a.approved) {
-        status += " · ✗ 未信任 → 连接器 → 自定义连接器 → aab → 信任";
+        status += " · ✗ " + tr("doc.trust.missing");
       } else if (trustStale("workbuddy")) {
-        status += " · ⚠ 信任记录对应的是旧配置，改了路径后需重新点：连接器 → 自定义连接器 → aab → 信任";
+        status += " · " + tr("doc.trust.stale");
       } else {
         const d = a.ts ? new Date(a.ts) : null;
         const pad = (n) => String(n).padStart(2, "0");
-        status += ` · ✓ 已信任${d ? `（${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}）` : ""}`;
+        const when = d ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}` : "";
+        status += ` · ✓ ${when ? tr("doc.st.trusted", { time: when }) : tr("doc.st.trusted", { time: "?" })}`;
       }
     }
     lines.push(`  ${host.label.padEnd(12)} ${status}`);

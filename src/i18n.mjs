@@ -71,6 +71,14 @@ const DICT = {
     "doc.c.none": "没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y @tianemon/ai-agent-bridge mcp",
     "doc.c.untrusted": "配置都写好了，但 WorkBuddy 还没点信任 → 连接器 → 自定义连接器 → aab → 信任（点完新开会话）",
     "doc.c.ok": "已安装的客户端都已注册。改完配置需新开会话（WorkBuddy 可能还要点一次 Trust）。",
+    "doc.trust.stale": "⚠ 信任记录对应的是旧配置，改了路径后需重新点：连接器 → 自定义连接器 → aab → 信任",
+    "doc.trust.missing": "未信任 → 连接器 → 自定义连接器 → aab → 信任",
+    "doc.st.registered": "已注册",
+    "doc.st.missing": "未注册",
+    "doc.st.stale": "已注册但脚本路径不存在",
+    "doc.st.unknown": "无法检测",
+    "doc.st.trusted": "已信任（{time}）",
+    "doc.st.untrusted": "未安装，不处理",
   },
 
   en: {
@@ -136,6 +144,14 @@ const DICT = {
     "doc.c.none": "no MCP-capable client detected. In whichever client you use, add an MCP entry: npx -y @tianemon/ai-agent-bridge mcp",
     "doc.c.untrusted": "configs are written, but WorkBuddy is not trusted yet → 连接器 → 自定义连接器 → aab → 信任 (then open a new session)",
     "doc.c.ok": "every installed client is registered. Open a new session after config changes (WorkBuddy may also need one Trust click).",
+    "doc.trust.stale": "⚠ the trust record was signed for an older config — click again: 连接器 → 自定义连接器 → aab → 信任",
+    "doc.trust.missing": "not trusted → 连接器 → 自定义连接器 → aab → 信任",
+    "doc.st.registered": "registered",
+    "doc.st.missing": "not registered",
+    "doc.st.stale": "registered, but the script path is gone",
+    "doc.st.unknown": "cannot detect",
+    "doc.st.trusted": "trusted ({time})",
+    "doc.st.untrusted": "not installed, skipped",
   },
 };
 

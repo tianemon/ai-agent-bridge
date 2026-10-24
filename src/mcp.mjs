@@ -50,7 +50,12 @@ const TOOLS = [
       properties: {
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto", description: "哪个工具；auto=三家里最近的" },
         level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
-        turns: { type: "string", description: "直接要某几轮，例如 12-14 或 last:5（优先于 level）" },
+        turns: {
+          type: "string",
+          description:
+            "直接要某几轮（优先于 level）：12-14 精确区间｜12 单轮｜last:5 最近 5 轮｜from:30 第 30 轮起｜around:40±2 第 40 轮前后各 2 轮",
+        },
+        maxChars: { type: "integer", minimum: 200, maximum: 20000, description: "本次输出字数上限，默认 L1 4200 / 其他 9000" },
         since: { type: "string", description: "只要这段时间内有活动的会话，例如 24h / 7d / 2026-10-23" },
         session: { type: "string", description: "会话 id 或前缀，锚定某一次会话" },
         project: { type: "string", description: "项目绝对路径；留空=当前工作目录（子目录归到 git 根）" },
@@ -84,7 +89,8 @@ const TOOLS = [
         session: { type: "string", description: "会话 id 或前缀；留空=该工具最新一个" },
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto" },
         level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
-        turns: { type: "string", description: "例如 12-14 或 last:5" },
+        turns: { type: "string", description: "12-14｜12｜last:5｜from:30｜around:40±2" },
+        maxChars: { type: "integer", minimum: 200, maximum: 20000 },
         project: { type: "string" },
         known: KNOWN_SCHEMA,
       },
@@ -115,7 +121,11 @@ const TOOLS = [
   },
 ];
 
-const toOpts = (args = {}) => ({ ...args, _: [args.query || ""] });
+const toOpts = (args = {}) => {
+  const o = { ...args, _: [args.query || ""] };
+  if (args.maxChars) o["max-chars"] = args.maxChars; // CLI 侧的参数名是 kebab-case
+  return o;
+};
 
 async function callTool(name, args = {}) {
   const o = toOpts(args);

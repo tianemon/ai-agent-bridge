@@ -156,7 +156,11 @@ config. If you would rather not click at all, two options:
 aab list --since 24h                     # what happened lately, one line each
 aab latest --agent codex --level 1       # newest conclusion only
 aab latest --agent codex --level 3       # still not enough? go one layer deeper
-aab latest --turns 40-41                 # you already know which turns you need
+aab latest --turns 40-41                 # exact range
+aab latest --turns 12                    # one turn
+aab latest --turns last:5                # last 5 turns
+aab latest --turns from:60               # from turn 60 to the end
+aab latest --turns "around:40±2"         # window around turn 40 (default span 3)
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
 aab read --session 53bf411c --level 2
 aab grep "paths-ignore" --agent claude --limit 3

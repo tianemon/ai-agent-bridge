@@ -9,7 +9,8 @@ import { spawnSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildLevels } from "../src/ladder.mjs";
+import { buildLevels, renderTurns } from "../src/ladder.mjs";
+import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection } from "../src/install.mjs";
 
 const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
@@ -315,6 +316,30 @@ check("重复执行 install 不会累积 TOML 段落", () => {
   if (n !== 1) throw new Error(`aab 段落有 ${n} 个，应为 1`);
   if (text.includes("[mcp_servers.pickup]")) throw new Error("pickup 段落未清掉");
   return "1 段，旧名已清";
+});
+
+check("turns 语法：range / last / from / around", () => {
+  const eq = (a, b) => JSON.stringify(parseTurns(a)) === JSON.stringify(b);
+  if (!eq("12-14", { from: 12, to: 14 })) throw new Error("区间解析错");
+  if (!eq("12", { from: 12, to: 12 })) throw new Error("单轮解析错");
+  if (!eq("last:5", { last: 5 })) throw new Error("last 解析错");
+  if (!eq("from:30", { from: 30 })) throw new Error("from 解析错");
+  if (!eq("around:40±2", { around: 40, span: 2 })) throw new Error("around 解析错");
+  if (parseTurns("第几轮") !== null) throw new Error("非法输入应返回 null");
+  return "5 种写法 + 非法输入";
+});
+
+check("from: 渲染到最后一轮，around: 渲染前后窗口", () => {
+  const t = (i, user, finals) => ({ i, user, userTs: "", finals, narration: [], tools: [], files: [] });
+  const s = {
+    agent: "codex", id: "x", cwd: "/tmp", mtimeMs: 0, files: [{ file: "a", mtimeMs: 0, size: 1 }], compaction: [],
+    turns: Array.from({ length: 10 }, (_, k) => t(k + 1, `需求${k + 1}`, [`结论${k + 1}`])),
+  };
+  const from = renderTurns(s, parseTurns("from:8"));
+  if (!from.includes("【第 8-10 轮")) throw new Error(`from: 渲染错：${from.slice(0, 60)}`);
+  const around = renderTurns(s, parseTurns("around:5±1"));
+  if (!around.includes("【第 4-6 轮")) throw new Error(`around: 渲染错：${around.slice(0, 60)}`);
+  return "from:8 → 8-10，around:5±1 → 4-6";
 });
 
 check("未知工具被拒绝，不静默降级", () => {

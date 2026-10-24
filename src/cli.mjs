@@ -197,7 +197,7 @@ const HELP = `aab —— 从另一个 AI 编码工具的会话接着干，只给
       --agent codex|claude|easymint|auto   默认 auto（三家里最新的）
       --level 1..4                         1=结论 2=最近3轮 3=需求时间线 4=命令/文件/git
       --session <id 前缀>                   直接锚定某次会话
-      --turns 12-14 | last:3                直接要某几轮（跳过阶梯）
+      --turns 12-14 | 12 | last:5 | from:30 | around:40±2   直接要某几轮（跳过阶梯）
       --since 24h | 2026-10-23              只要这段时间内有活动的
       --project <路径>                      默认当前目录（会归到 git 根）
       --scope auto|project|global           默认 auto：本项目优先，找不到退全机并注明

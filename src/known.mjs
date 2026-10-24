@@ -25,7 +25,7 @@ export function parseSince(spec) {
 }
 
 /**
- * "12" / "12-14" / "last:3" / [12,14] → {from,to} 或 {last}
+ * "12" / "12-14" / "last:3" / "from:30" / "around:40±2" → {from,to} | {last} | {around,span}
  * 单轮也按区间处理，渲染层统一走一条路径。
  */
 export function parseTurns(spec) {
@@ -38,6 +38,12 @@ export function parseTurns(spec) {
   const s = String(spec).trim();
   const last = s.match(/^(?:last:|-)(\d+)$/i);
   if (last) return { last: Number(last[1]) };
+  // from:30 → 第 30 轮到最新
+  const from = s.match(/^from:(\d+)$/i);
+  if (from) return { from: Number(from[1]) };
+  // around:40 / around:40±3 / around:40+3 → 以第 40 轮为中心，前后各 span 轮
+  const around = s.match(/^around:(\d+)(?:\s*(?:±|\+\/-?|\+-)\s*(\d+))?$/i);
+  if (around) return { around: Number(around[1]), span: around[2] ? Number(around[2]) : 3 };
   const range = s.match(/^(\d+)\s*[-~]\s*(\d+)$/);
   if (range) return { from: Number(range[1]), to: Number(range[2]) };
   if (/^\d+$/.test(s)) return { from: Number(s), to: Number(s) };

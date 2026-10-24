@@ -196,9 +196,14 @@ export function renderTurns(s, turns, { maxChars = 9000 } = {}) {
   if (turns.last) {
     from = Math.max(1, total - turns.last + 1);
     to = total;
+  } else if (turns.around) {
+    const span = turns.span ?? 3;
+    from = Math.max(1, turns.around - span);
+    to = Math.min(total, turns.around + span);
   } else {
     from = Math.max(1, turns.from);
-    to = Math.min(total, turns.to ?? turns.from);
+    // from: 只给起点 → 一直到最后；区间越界则夹到总轮数
+    to = Math.min(total, turns.to ?? total);
   }
   if (from > to) {
     return `轮次区间无效：${from}-${to}（会话共 ${total} 轮）`;

@@ -1,0 +1,49 @@
+{
+  "name": "@tianemon/agent-session-bridge",
+  "version": "0.1.0",
+  "description": "Read another AI coding tool's session — newest conclusion first, escalate only as far as you need.",
+  "type": "module",
+  "bin": {
+    "pickup": "./bin/pickup.mjs"
+  },
+  "main": "./src/registry.mjs",
+  "files": [
+    "bin",
+    "src",
+    "index.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node bin/pickup.mjs",
+    "mcp": "node bin/pickup.mjs mcp",
+    "test": "node test/run.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "ai-agent",
+    "session",
+    "handoff",
+    "codex",
+    "claude-code",
+    "easymint",
+    "context"
+  ],
+  "license": "MIT",
+  "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "tianemon <811978297@qq.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tianemon/agent-session-bridge.git"
+  },
+  "homepage": "https://github.com/tianemon/agent-session-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/tianemon/agent-session-bridge/issues"
+  }
+}

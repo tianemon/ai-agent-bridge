@@ -125,18 +125,19 @@ export function recordEntry(host, entry) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(st, null, 2) + "\n");
 }
 
-/** 当前配置 vs 我们上次写的：false = 配置在安装后被改过（信任大概率失效） */
-export function entryUnchanged(host) {
-  const rec = readState()[host]?.hash;
-  if (!rec) return true; // 没有记录就不下结论
-  if (host !== "workbuddy") return true;
-  try {
-    const cur = JSON.parse(fs.readFileSync(HOSTS.workbuddy.config, "utf8"))?.mcpServers?.[NAME];
-    const now = crypto.createHash("sha256").update(JSON.stringify(cur)).digest("hex").slice(0, 16);
-    return now === rec;
-  } catch {
-    return true;
-  }
+/**
+ * 信任是不是"改配置之前"签的。
+ *
+ * 判据用时间先后，不用哈希也不看宿主文件的 mtime：
+ *   approvalTs < 我们上次写入时间 → 这次配置是信任之后才存在，信任大概率失效
+ * 宿主自己会重写 mcp.json，mtime 不可信；我们自己写的 state.ts 才可信。
+ */
+export function trustStale(host) {
+  const st = readState()[host];
+  if (!st?.ts) return false; // 没记录过就不下结论
+  const a = approvalState(host);
+  if (!a?.approved) return false; // 未信任的情况由另一个分支处理
+  return a.ts > 0 && a.ts < st.ts;
 }
 
 export function detectHosts() {

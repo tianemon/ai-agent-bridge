@@ -95,6 +95,7 @@ function applyWorkbuddy({ dryRun }) {
   const dropped = LEGACY.filter((k) => cfg.mcpServers[k]);
   for (const k of dropped) delete cfg.mcpServers[k];
   if (!dropped.length && JSON.stringify(cfg.mcpServers[NAME]) === JSON.stringify(entry)) {
+    recordEntry("workbuddy", entry); // 即使跳过写入也要记时间，doctor 才判断得出信任是否早于配置
     return { ok: true, msg: `已是当前配置，跳过（${file}）` };
   }
   cfg.mcpServers[NAME] = entry;

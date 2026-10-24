@@ -390,6 +390,37 @@ check("AAB_LANG=en 输出英文标签，正文保持原文", () => {
   return "英文标签 + 原文正文";
 });
 
+check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
+  // 唯一允许保留的中文：WorkBuddy 的菜单路径（它的界面就是中文）
+  const MENU = "连接器 → 自定义连接器 → aab → 信任";
+  const clean = (s) => s.split(MENU).join("");
+  const cmds = [
+    ["help"],
+    ["version"],
+    ["agents"],
+    ["doctor"],
+    ["install", "--dry-run"],
+    ["prompt"],
+    ["nosuchcmd"],
+    ["latest", "--agent", "cursor"],
+    ["grep"],
+    ["list", "--since", "1s"],
+  ];
+  const bad = [];
+  for (const args of cmds) {
+    const r = spawnSync(NODE, [SB, ...args], {
+      encoding: "utf8",
+      timeout: 60000,
+      env: { ...process.env, AAB_LANG: "en", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" },
+    });
+    const out = clean((r.stdout || "") + (r.stderr || ""));
+    const hit = out.match(/[\u4e00-\u9fff]+/g);
+    if (hit) bad.push(`${args.join(" ")} → ${hit.slice(0, 4).join(" / ")}`);
+  }
+  if (bad.length) throw new Error(`仍残留中文：${bad.join(" | ")}`);
+  return `${cmds.length} 条命令全英文`;
+});
+
 check("未知工具被拒绝，不静默降级", () => {
   const r = run(["latest", "--agent", "cursor"]);
   noCrash(r);

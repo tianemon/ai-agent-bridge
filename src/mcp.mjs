@@ -2,17 +2,22 @@
  * MCP server（stdio，JSON-RPC 2.0，换行分隔）。
  *
  * 只实现 tools，不实现 resources / prompts。
+ * 描述文案面向模型，写成英文为主 + 中文触发词：中文提问（「读一下 codex 最新会话」）
+ * 与英文提问都能匹配到，且海外用户读到的不是一屏中文。
  */
 import readline from "node:readline";
 import { AGENTS, AGENT_LABEL } from "./registry.mjs";
 import { actLatest, actRead, actList, actGrep } from "./cli.mjs";
 
 import { VERSION } from "./version.mjs";
+import { t as tr } from "./i18n.mjs";
 
 export { VERSION };
 
 /** 我们实际实现的协议版本；客户端要别的就回这个，不谎称支持 */
 const PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-30"];
+
+const TOOL_LIST = "codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy";
 
 /**
  * 随 initialize 一起下发的提示（MCP 规范里的 InitializeResult.instructions，规范原文：宿主可以把它
@@ -20,17 +25,21 @@ const PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-30"];
  * 这段则可能常驻上下文——所以触发词和"别做什么"都放这儿。
  */
 const INSTRUCTIONS = [
-  "aab：读【另一个 AI 编码工具】（codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy）的会话。",
-  "用户说「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」时，用 session_latest，",
-  "默认 level=1（约 100 token），不够再逐层加 level；已知轮次用 turns 直接锚定。",
-  "不要用 shell 手工解析 rollout-*.jsonl 或会话 sqlite —— 单条线程可达 50MB 以上，会把上下文撑爆。",
-  "若 aab doctor 显示 WorkBuddy 未信任，把「连接器 → 自定义连接器 → aab → 信任」原样告诉用户——这一步只能人来点。",
+  `aab reads another AI coding tool's session (${TOOL_LIST}) — newest conclusion first, deeper only if needed. `,
+  'Trigger it whenever the user says "read the latest codex session", "where did claude get to", ',
+  '"pick up what the other tool was doing" — 中文：「读一下 codex 最新会话」「claude 那边做到哪了」',
+  '「接着上一个工具的活干」— call session_latest. Default level=1 (~120 tokens); raise the level only ',
+  "if it is not enough, and anchor with turns when you already know which turns you need. ",
+  "Do not parse rollout-*.jsonl or session sqlite by hand — one thread can exceed 50 MB and will blow up ",
+  "the context. If aab doctor reports WorkBuddy as untrusted, tell the user to click ",
+  "连接器 → 自定义连接器 → aab → 信任 (Connectors → Custom connectors → aab → Trust) — only a human can do that.",
 ].join("");
 
 const KNOWN_SCHEMA = {
   type: "object",
   description:
-    "调用方已经知道的信息，传了就少猜一次。显式参数优先于这里的同名字段。例：{agent:'codex', project:'/repo', session:'01a16729', turns:'last:5', since:'24h'}",
+    "What the caller already knows — passing it saves a guess. Explicit arguments win over same-named fields here. " +
+    "Example: {agent:'codex', project:'/repo', session:'01a16729', turns:'last:5', since:'24h'}",
   properties: {
     agent: { type: "string", enum: AGENTS },
     project: { type: "string" },
@@ -44,22 +53,43 @@ const TOOLS = [
   {
     name: "session_latest",
     description:
-      "读【另一个 AI 编码工具】的会话：codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 的最新进展（「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」都用这个）。从最后一条结论开始，信息不够再加 level：默认 level=1 只给最后一条结论（最省上下文）；不够再调 level=2（最近 3 轮问答）→3（全部需求时间线）→4（命令/文件/git）。返回末尾标明更高层的 token 代价。若已知项目/会话/轮次，用 project/session/turns 直接锚定，比让它自己猜更准。",
+      `Read another AI coding tool's session (${TOOL_LIST}) starting from the newest conclusion. ` +
+      'Use this for "read the latest codex session", "where did claude get to", "pick up what the other tool ' +
+      'was doing"（中文：「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」）. ' +
+      "level=1 (default) returns only the final conclusion, the cheapest possible answer; escalate only if " +
+      "needed: 2 = last 3 turns, 3 = requirement timeline, 4 = commands/files/git state. Every reply ends with " +
+      "the token cost of the next level. If you already know the project/session/turns, pass them — anchoring " +
+      "beats guessing.",
     inputSchema: {
       type: "object",
       properties: {
-        agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto", description: "哪个工具；auto=三家里最近的" },
+        agent: {
+          type: "string",
+          enum: ["auto", ...AGENTS],
+          default: "auto",
+          description: "which tool; auto = newest across all of them",
+        },
         level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
         turns: {
           type: "string",
           description:
-            "直接要某几轮（优先于 level）：12-14 精确区间｜12 单轮｜last:5 最近 5 轮｜from:30 第 30 轮起｜around:40±2 第 40 轮前后各 2 轮",
+            "exact turns, takes precedence over level: 12-14 range | 12 single | last:5 last five | from:30 from turn 30 | around:40±2 window",
         },
-        maxChars: { type: "integer", minimum: 200, maximum: 20000, description: "本次输出字数上限，默认 L1 4200 / 其他 9000" },
-        since: { type: "string", description: "只要这段时间内有活动的会话，例如 24h / 7d / 2026-10-23" },
-        session: { type: "string", description: "会话 id 或前缀，锚定某一次会话" },
-        project: { type: "string", description: "项目绝对路径；留空=当前工作目录（子目录归到 git 根）" },
-        scope: { type: "string", enum: ["auto", "project", "global"], default: "auto", description: "project=只在本项目，找不到就报错；auto=找不到退全机并注明" },
+        maxChars: {
+          type: "integer",
+          minimum: 200,
+          maximum: 20000,
+          description: "cap for this reply; defaults to 4200 at level 1 and 9000 otherwise",
+        },
+        since: { type: "string", description: "only sessions active in this window, e.g. 24h / 7d / 2026-10-23" },
+        session: { type: "string", description: "session id or prefix, to anchor one specific session" },
+        project: { type: "string", description: "absolute project path; empty = cwd (subdirectories resolve to the git root)" },
+        scope: {
+          type: "string",
+          enum: ["auto", "project", "global"],
+          default: "auto",
+          description: "project = this project only, error if none; auto = fall back to the whole machine (noted)",
+        },
         known: KNOWN_SCHEMA,
       },
     },
@@ -67,7 +97,9 @@ const TOOLS = [
   {
     name: "session_list",
     description:
-      "列出 codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 最近的会话（时间、工具、项目、会话 id、体积）。不确定「最新那个」是哪一次、或想看某个项目最近的几轮都是谁在跑时先用它。",
+      `List recent sessions across ${TOOL_LIST} (time, tool, project, id, size; multi-segment threads are ` +
+      "marked). Use it when you are not sure which session is the newest, or want to see what has been running " +
+      "in a project recently. 中文：不确定「最新那个」是哪一次时先用它。",
     inputSchema: {
       type: "object",
       properties: {
@@ -82,14 +114,17 @@ const TOOLS = [
   },
   {
     name: "session_read",
-    description: "读 codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 里指定的那次会话（按 id 前缀），走同样的 level / turns 控制。已知具体是哪次会话（或已从 session_latest 拿到 id）时用这个。",
+    description:
+      `Read one specific session (by id prefix) from ${TOOL_LIST}, with the same level / turns controls. ` +
+      "Use it when you already know which session it is, or after session_latest gave you an id. " +
+      "中文：已知具体是哪次会话时用这个。",
     inputSchema: {
       type: "object",
       properties: {
-        session: { type: "string", description: "会话 id 或前缀；留空=该工具最新一个" },
+        session: { type: "string", description: "session id or prefix; empty = the newest one for that tool" },
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto" },
         level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
-        turns: { type: "string", description: "12-14｜12｜last:5｜from:30｜around:40±2" },
+        turns: { type: "string", description: "12-14 | 12 | last:5 | from:30 | around:40±2" },
         maxChars: { type: "integer", minimum: 200, maximum: 20000 },
         project: { type: "string" },
         known: KNOWN_SCHEMA,
@@ -99,7 +134,10 @@ const TOOLS = [
   {
     name: "session_grep",
     description:
-      "在 codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 最近的会话里按关键词定点找片段（每处最多 480 字，默认 8 处），思考块不参与匹配。只在前面的 level 都不够、需要确认某个具体细节时用；不要用它把整段对话捞出来。",
+      `Keyword search inside recent sessions of ${TOOL_LIST} — up to 480 characters per hit, 8 hits by ` +
+      "default; reasoning blocks are never searched. Use it only when the level ladder is not enough and you " +
+      "need one specific detail; do not use it to dump a whole conversation. " +
+      "中文：只在前面的 level 都不够、要确认某个具体细节时用。",
     inputSchema: {
       type: "object",
       properties: {
@@ -116,7 +154,9 @@ const TOOLS = [
   },
   {
     name: "session_agents",
-    description: "列出本机支持读取的工具，以及各自的数据目录（用于诊断“为什么读不到某家的会话”）。",
+    description:
+      "List the tools whose sessions can be read on this machine, with their data directories — useful to " +
+      "diagnose why one tool returns nothing.",
     inputSchema: { type: "object", properties: {} },
   },
 ];
@@ -190,7 +230,7 @@ export function serveMcp() {
         send({
           jsonrpc: "2.0",
           id,
-          result: { content: [{ type: "text", text: `失败：${e.message}` }], isError: true },
+          result: { content: [{ type: "text", text: tr("mcp.failed", { msg: e.message }) }], isError: true },
         });
       }
       return;

@@ -126,12 +126,12 @@ export function doctor() {
 
   lines.push(tr("doc.scope"));
   lines.push(`  cwd     ${process.cwd()}`);
-  lines.push("          （默认按 cwd 所在项目过滤；子目录会归到 git 根；不像项目目录时才全机）");
+  lines.push("          " + tr("doc.scopeHint"));
   lines.push("");
 
   const missing = detected.filter((h) => registered(h) === false);
   if (missing.length) {
-    lines.push(tr("doc.conclusion") + tr("doc.c.needInstall", { hosts: missing.map((h) => HOSTS[h].label).join(", ") }));
+    lines.push(tr("doc.conclusion") + tr("doc.c.needInstall", { hosts: missing.map((h) => HOSTS[h].label).join(tr("list.sep")) }));
   } else if (!detected.length) {
     lines.push(tr("doc.conclusion") + tr("doc.c.none"));
   } else {

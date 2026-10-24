@@ -6,13 +6,15 @@
  *   - 不预装、不全局安装（npx 直接跑也行）
  *
  * 做的事：幂等（内容相同就跳过）、先备份、可 --dry-run。
+ * 所有可见文案走 i18n（默认英文，AAB_LANG=zh 切中文）。
  */
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { HOSTS, detectHosts, registered, approvalState, recordEntry, NAME, LEGACY } from "./hosts.mjs";
+import { t as tr } from "./i18n.mjs";
 
-const TOML_HEADER = "[mcp_servers.aab]";
+const TOML_HEADER = `[mcp_servers.${NAME}]`;
 
 /** 尽量别把 MCP 命令钉在"某个工具自带的 node"上：那套运行时可能被换掉或升级掉 */
 const MANAGED_NODE = /[\\/]\.workbuddy[\\/]|[\\/]_npx[\\/]|[\\/]node_modules[\\/]/;
@@ -49,7 +51,7 @@ const PKG = "@tianemon/ai-agent-bridge";
 function commandFor() {
   const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
   if (/[\\/]_npx[\\/]/.test(script)) {
-    return { command: "npx", args: ["-y", PKG, "mcp"], note: "（从 npx 缓存运行，改为让 npx 解析包名）" };
+    return { command: "npx", args: ["-y", PKG, "mcp"], note: tr("install.note.npx") };
   }
   return { command: resolveNode(), args: [script, "mcp"], note: "" };
 }
@@ -90,17 +92,17 @@ function applyWorkbuddy({ dryRun }) {
   try {
     cfg = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : { mcpServers: {} };
   } catch (e) {
-    return { ok: false, msg: `${file} 不是合法 JSON（${e.message}），未改动` };
+    return { ok: false, msg: tr("install.m.notJson", { file, err: e.message }) };
   }
   cfg.mcpServers = cfg.mcpServers || {};
   const dropped = LEGACY.filter((k) => cfg.mcpServers[k]);
   for (const k of dropped) delete cfg.mcpServers[k];
   if (!dropped.length && JSON.stringify(cfg.mcpServers[NAME]) === JSON.stringify(entry)) {
     recordEntry("workbuddy", entry); // 即使跳过写入也要记时间，doctor 才判断得出信任是否早于配置
-    return { ok: true, msg: `已是当前配置，跳过（${file}）` };
+    return { ok: true, msg: tr("install.m.current", { file }) };
   }
   cfg.mcpServers[NAME] = entry;
-  if (dryRun) return { ok: true, msg: `将写入 ${file}` };
+  if (dryRun) return { ok: true, msg: tr("install.m.plan", { file, replaced: "" }) };
 
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const bak = backup(file);
@@ -108,7 +110,12 @@ function applyWorkbuddy({ dryRun }) {
   recordEntry("workbuddy", entry);
   return {
     ok: true,
-    msg: `已写入 ${file}${bak ? `（备份 ${path.basename(bak)}）` : ""}${dropped.length ? `，并移除旧名 ${dropped.join(", ")}` : ""}`,
+    msg: tr("install.m.done", {
+      file,
+      bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "",
+      legacy: dropped.length ? tr("install.m.legacy", { names: dropped.join(", ") }) : "",
+      replaced: "",
+    }),
   };
 }
 
@@ -127,10 +134,10 @@ function applyCodex({ dryRun }) {
   try {
     text = fs.readFileSync(file, "utf8");
   } catch {
-    return { ok: false, msg: `${file} 不存在（Codex 未安装？），跳过` };
+    return { ok: false, msg: tr("install.m.codexMissing", { file }) };
   }
   const stale = text.includes(block) ? !LEGACY.some((k) => text.includes(`[mcp_servers.${k.replace(/-/g, "_")}]`)) : false;
-  if (stale) return { ok: true, msg: `已是当前配置，跳过（${file}）` };
+  if (stale) return { ok: true, msg: tr("install.m.current", { file }) };
 
   // 先把同名/旧名段落都摘掉，再统一追加
   let cleaned = text;
@@ -143,22 +150,53 @@ function applyCodex({ dryRun }) {
   // 注意：这里必须基于 cleaned（已摘掉同名/旧名段落），
   // 早前写成 next = text 导致每跑一次就多追加一段（实测出现过三段重复）
   const next = cleaned;
-  if (dryRun) return { ok: true, msg: `将写入 ${file}${removed ? "（替换原有段落）" : ""}` };
+  if (dryRun) {
+    return { ok: true, msg: tr("install.m.plan", { file, replaced: removed ? tr("install.m.replaced") : "" }) };
+  }
 
   const bak = backup(file);
   fs.writeFileSync(file, `${next.trimEnd()}\n\n${block}\n`);
   return {
     ok: true,
-    msg: `已写入 ${file}${bak ? `（备份 ${path.basename(bak)}）` : ""}${removed ? "，替换了原有段落" : ""}`,
+    msg: tr("install.m.done", {
+      file,
+      bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "",
+      legacy: "",
+      replaced: removed ? tr("install.m.replacedAfter") : "",
+    }),
   };
 }
 
 /* ── Claude Code：走官方 CLI，别手改它的配置 ── */
 function applyClaude({ dryRun }) {
   const reg = registered("claude");
-  if (reg === null) return { ok: false, msg: "找不到 claude CLI，跳过" };
-  if (reg) return { ok: true, msg: "已注册（如需改成别的寻址方式先 claude mcp remove）" };
-  if (dryRun) return { ok: true, msg: "将执行 claude mcp add --scope user agent-bridge …" };
+  if (reg === null) return { ok: false, msg: tr("install.m.claudeNoCli") };
+
+  // 旧名条目指向已删除的脚本，表现为"连接失败"，留着既占位又误导 → 先摘掉
+  const removedLegacy = [];
+  if (!dryRun) {
+    for (const n of LEGACY) {
+      try {
+        execFileSync("claude", ["mcp", "remove", n, "--scope", "user"], {
+          encoding: "utf8",
+          timeout: 15000,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        removedLegacy.push(n);
+      } catch {
+        /* 不存在就算了 */
+      }
+    }
+  }
+  const legacyNote = removedLegacy.length ? tr("install.m.legacy", { names: removedLegacy.join(", ") }) : "";
+
+  if (reg) {
+    return {
+      ok: true,
+      msg: legacyNote ? tr("install.m.claudeDone") + legacyNote : tr("install.m.claudeCurrent"),
+    };
+  }
+  if (dryRun) return { ok: true, msg: tr("install.m.claudePlan", { name: NAME }) };
 
   const { command, args } = commandFor();
   try {
@@ -167,9 +205,9 @@ function applyClaude({ dryRun }) {
       timeout: 30000,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return { ok: true, msg: `已注册（scope=user）${dropped.length ? `，并移除旧名 ${dropped.join(", ")}` : ""}` };
+    return { ok: true, msg: tr("install.m.claudeDone") + legacyNote };
   } catch (e) {
-    return { ok: false, msg: `注册失败：${String(e.stderr || e.message).split("\n")[0]}` };
+    return { ok: false, msg: tr("install.m.claudeFail", { err: String(e.stderr || e.message).split("\n")[0] }) };
   }
 }
 
@@ -188,9 +226,13 @@ export function install({ targets, dryRun = false } = {}) {
 
   const { command, args, note } = commandFor();
   const out = [
-    `aab 安装${dryRun ? "（dry-run，不写任何文件）" : ""}`,
-    `  MCP 命令  ${command} ${args.join(" ")}${note}`,
-    `  探测到    ${detected.length ? detected.map((h) => HOSTS[h].label).join("、") : "（没有已安装的宿主）"}`,
+    tr("install.title", { dry: dryRun ? tr("install.dry") : "" }),
+    tr("install.mcpCmd", { cmd: `${command} ${args.join(" ")}${note}` }),
+    tr("install.detected", {
+      list: detected.length
+        ? detected.map((h) => HOSTS[h].label).join(tr("list.sep"))
+        : tr("install.noneDetected"),
+    }),
     "",
   ];
 
@@ -199,29 +241,29 @@ export function install({ targets, dryRun = false } = {}) {
     out.push(`  ${HOSTS[h].label.padEnd(12)} ${r.ok ? "✓" : "✗"} ${r.msg}`);
   }
   for (const h of skipped) {
-    const why = detected.includes(h) ? "本次未指定" : "未检测到本机安装";
-    out.push(`  ${HOSTS[h].label.padEnd(12)} – 跳过（${why}）`);
+    const why = detected.includes(h) ? tr("install.skip.chosen") : tr("install.skip.installed");
+    out.push(tr("install.skipRow", { label: HOSTS[h].label.padEnd(12), why }));
   }
-  if (unknown.length) out.push(`  ${unknown.join(", ")}  未知宿主，未处理`);
+  if (unknown.length) out.push(tr("install.unknown", { list: unknown.join(tr("list.sep")) }));
 
   out.push("");
   if (!chosen.length) {
-    out.push("没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y @tianemon/ai-agent-bridge mcp`。");
+    out.push(tr("install.noTargets"));
     return out.join("\n");
   }
 
   // WorkBuddy 有一道人工闸，宿主自己不会弹提示，只能靠我们把它说清楚
   const wb = chosen.includes("workbuddy") ? approvalState("workbuddy") : null;
   if (wb && !wb.approved) {
-    out.push("⚠ WorkBuddy 还需要点一次信任，否则 MCP 不会加载：");
-    out.push("   连接器 → 自定义连接器 → aab → 信任");
-    out.push("   （这一步没法自动化：信任记录由 WorkBuddy 自己写，工具代写等于绕过安全闸）");
+    out.push(tr("install.wbWarn"));
+    out.push(tr("install.wbPath"));
+    out.push(tr("install.wbWhy"));
   }
   const rm = runtimeMode(fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname));
   if (rm.dev) {
-    out.push("提示：当前是【开发目录】运行，配置指向这份源码（改代码即生效）。");
-    out.push("      正式使用请装安装版：npm i -g @tianemon/ai-agent-bridge@latest && aab install");
+    out.push(tr("install.devHint"));
+    out.push(tr("install.devHint2"));
   }
-  out.push("下一步：新开一个会话（或重连连接器）后 MCP 才会加载。");
+  out.push(tr("install.next"));
   return out.join("\n");
 }

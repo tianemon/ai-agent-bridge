@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import readline from "node:readline";
 import { AGENT_LABEL, recentSessions } from "./registry.mjs";
+import { t as tr } from "./i18n.mjs";
 
 const SNIPPET = 480;
 const LEAD = 220;
@@ -98,6 +99,6 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
     if (hits.length >= limit) break;
   }
 
-  if (!hits.length) return `没命中「${query}」。`;
-  return `${hits.join("\n\n")}\n\n（共 ${hits.length} 处，已截断；要完整上下文用 session_read + turns 指定轮次）`;
+  if (!hits.length) return tr("grep.none", { q: query });
+  return `${hits.join("\n\n")}\n\n${tr("grep.footer", { n: hits.length })}`;
 }

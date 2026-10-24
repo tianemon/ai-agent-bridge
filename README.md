@@ -268,6 +268,11 @@ then add it to `LIST` in `src/registry.mjs`. Nothing else changes.
   SpecStory already does that; this tool is the compressed handoff layer.
 - Prompts are read verbatim. Anything you typed into a previous tool — including secrets — will be
   reproduced in the new context. Keep keys out of prompts.
+- English and Chinese only. Every label the tool prints is localized (`AAB_LANG`), and the test suite
+  fails if any command leaks Chinese in English mode — but a third language would need new dictionary
+  entries in `src/i18n.mjs`, not a code change.
+- WorkBuddy's trust gate cannot be automated. The approval record is signed by WorkBuddy itself; a tool
+  that could write it would be defeating the gate. `aab doctor` reports the state instead.
 
 ## License
 

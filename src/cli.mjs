@@ -19,6 +19,7 @@ import { install } from "./install.mjs";
 import { doctor } from "./doctor.mjs";
 import { prompt } from "./prompt.mjs";
 import { VERSION } from "./version.mjs";
+import { t as tr, isZh } from "./i18n.mjs";
 
 /* ── 参数 ── */
 export function parseArgs(argv) {
@@ -86,15 +87,15 @@ function resolveScope({ agent, project, scope }) {
   const global = latestSession({ agent });
   return {
     project: "",
-    note: global ? `（本项目下没有 ${AGENT_LABEL[agent] || agent} 的会话，已退到全机最新：${global.cwd}）` : "",
+    note: global ? tr("cli.fallback", { agent: AGENT_LABEL[agent] || agent, cwd: global.cwd }) : "",
   };
 }
 
 /** 未知工具直接拒绝，绝不静默降级成 "全部" */
 const agentGuard = (a) =>
-  a && a !== "auto" && !isAgent(a) ? `不支持的工具「${a}」，可选：${AGENTS.join(" | ")}（或 auto）` : "";
+  a && a !== "auto" && !isAgent(a) ? tr("cli.badAgent", { a, list: AGENTS.join(" | ") }) : "";
 
-const warningsOf = (w) => (w.length ? `（已忽略：${w.join("；")}）\n\n` : "");
+const warningsOf = (w) => (w.length ? tr("cli.ignored", { list: w.join("; ") }) + "\n\n" : "");
 
 /* ── 动作 ── */
 export async function actLatest(o) {
@@ -104,15 +105,17 @@ export async function actLatest(o) {
   const scope = o.scope || "auto";
   const project = defaultProject(input.project);
   const { project: useProject, note, empty } = resolveScope({ agent: input.agent, project, scope });
-  if (empty) return `本项目下没有 ${AGENT_LABEL[input.agent] || "任何"} 的会话（scope=project 不回退）。`;
+  if (empty) return tr("cli.scopeEmpty", { agent: AGENT_LABEL[input.agent] || "auto" });
 
   const s = input.session
     ? findSession({ id: input.session, agent: input.agent, project: useProject })
     : latestSession({ agent: input.agent, project: useProject, since: input.since });
 
   if (!s) {
-    if (input.session) return `没找到会话 ${input.session}`;
-    return `没有找到${input.agent === "auto" ? "任何" : (AGENT_LABEL[input.agent] || input.agent) + " "}会话。`;
+    if (input.session) return tr("cli.noSession", { id: input.session });
+    return input.agent === "auto"
+      ? tr("cli.noneAny")
+      : tr("cli.noneAgent", { agent: AGENT_LABEL[input.agent] || input.agent });
   }
   const loaded = await loadSession(s);
   return (
@@ -130,7 +133,12 @@ export async function actRead(o) {
   const s = input.session
     ? findSession({ id: input.session, agent: input.agent, project })
     : latestSession({ agent: input.agent, project });
-  if (!s) return input.session ? `没找到会话 ${input.session}` : "没有找到会话。";
+  if (!s)
+    return input.session
+      ? tr("cli.noSession", { id: input.session })
+      : input.agent === "auto"
+        ? tr("cli.noneAny")
+        : tr("cli.noneAgent", { agent: AGENT_LABEL[input.agent] || input.agent });
   const loaded = await loadSession(s);
   return warningsOf(input.warnings) + render(loaded, { level: o.level, maxChars: o["max-chars"], turns: input.turns });
 }
@@ -142,7 +150,7 @@ export function actList(o) {
   const scope = o.scope || "auto";
   const project = defaultProject(input.project);
   const { project: useProject, empty } = resolveScope({ agent: input.agent, project, scope });
-  if (empty) return `本项目下没有 ${AGENT_LABEL[input.agent] || "任何"} 的会话（scope=project 不回退）。`;
+  if (empty) return tr("cli.scopeEmpty", { agent: AGENT_LABEL[input.agent] || "auto" });
 
   const limit = Number.parseInt(o.limit, 10);
   const rows = recentSessions({
@@ -151,9 +159,9 @@ export function actList(o) {
     since: input.since,
     limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 50) : 15,
   });
-  if (!rows.length) return input.since ? "该时间范围内没有会话。" : "没有找到会话。";
+  if (!rows.length) return input.since ? tr("cli.noneRange") : tr("cli.noneAny");
 
-  const head = input.since ? `共 ${rows.length} 条（${new Date(input.since).toLocaleString()} 之后）\n` : "";
+  const head = input.since ? tr("cli.listHead", { n: rows.length, after: new Date(input.since).toLocaleString() }) + "\n" : "";
   return (
     head +
     rows
@@ -164,7 +172,7 @@ export function actList(o) {
         const mb = (s.files.reduce((a, f) => a + f.size, 0) / 1e6).toFixed(1);
         const proj = (s.cwd || "?").split("/").pop();
         // 多段（续跑）必须在第一层就看得见：这决定"手读会不会漏"
-        const segs = s.files.length > 1 ? ` · ${s.files.length} 段` : "";
+        const segs = s.files.length > 1 ? tr("list.segs", { n: s.files.length }) : "";
         return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(12)} ${proj.padEnd(22)} ${String(s.id).slice(0, 18)}  ${mb}MB${segs}`;
       })
       .join("\n")
@@ -173,7 +181,7 @@ export function actList(o) {
 
 export async function actGrep(o) {
   const q = String(o._[0] || o._[1] || "").trim();
-  if (!q || q === "true") return '用法：aab grep "关键词" [--agent codex] [--since 24h] [--limit 8]';
+  if (!q || q === "true") return tr("cli.grepUsage");
   const input = resolveInputs(o.known, o);
   const bad = agentGuard(input.agent);
   if (bad) return bad;
@@ -190,11 +198,11 @@ export async function actGrep(o) {
   });
 }
 
-const HELP = `aab —— 从另一个 AI 编码工具的会话接着干，只给够用的那一层
+const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只给够用的那一层
 
 用法：
   aab latest   从最新一条结论开始（默认 level=1，不够再加）
-      --agent codex|claude|easymint|auto   默认 auto（三家里最新的）
+      --agent codex|claude|workbuddy|codebuddy|easymint|auto   默认 auto（所有来源里最新的）
       --level 1..4                         1=结论 2=最近3轮 3=需求时间线 4=命令/文件/git
       --session <id 前缀>                   直接锚定某次会话
       --turns 12-14 | 12 | last:5 | from:30 | around:40±2   直接要某几轮（跳过阶梯）
@@ -211,13 +219,50 @@ const HELP = `aab —— 从另一个 AI 编码工具的会话接着干，只给
   aab install  [--agent workbuddy,codex,claude] [--dry-run]
                  只给本机确实装了的客户端注册 MCP；不给 --agent 就自动探测
   aab doctor                                                 诊断：能读到谁、哪个客户端还没挂上
-  aab agents                                                列出能读哪些工具的会话
+  aab agents                                                 列出能读哪些工具的会话
   aab prompt                                                 打印一段可直接粘给任意 agent 的安装指令
   aab version
 
 --known 可传 JSON，让工具不用猜：
   aab latest --known '{"agent":"codex","project":"/path/to/repo","session":"01a16729","turns":"last:5"}'
-  显式参数优先于 --known 里的同名字段。`;
+  显式参数优先于 --known 里的同名字段。
+
+输出语言：AAB_LANG=zh|en 可强制指定，否则跟随 LC_ALL / LANG（默认 en）。
+会话正文永远逐字保留，只翻译周围的标签。`;
+
+const HELP_EN = `aab — pick up where another AI coding tool left off, with only as much context as you need.
+
+Usage:
+  aab latest   start from the newest conclusion (level=1 by default; raise it if needed)
+      --agent codex|claude|workbuddy|codebuddy|easymint|auto   default: auto (newest across all)
+      --level 1..4                      1=conclusion 2=last 3 turns 3=timeline 4=commands/files/git
+      --session <id prefix>             anchor to one specific session
+      --turns 12-14 | 12 | last:5 | from:30 | around:40±2   exact slice (skips the ladder)
+      --since 24h | 2026-10-23          only sessions active in this window
+      --project <path>                  default: cwd (resolved to the git root)
+      --scope auto|project|global       default auto: this project first, else whole machine (noted)
+      --max-chars N                     cap the output length
+      --known '<json>'                  what the caller already knows (see below)
+
+  aab list     [--limit 15] [--since 24h] [--agent ...] [--scope ...]
+  aab read     [--session <id>] [--turns 12-14] [--level N]
+  aab grep     "keyword" [--agent ...] [--since ...] [--limit 8]
+  aab mcp      stdio MCP server
+  aab install  [--agent workbuddy,codex,claude] [--dry-run]
+                 register MCP only with clients actually installed here; no --agent = auto-detect
+  aab doctor                                                 diagnose: what is readable, which host is missing
+  aab agents                                                 list which tools can be read
+  aab prompt                                                 print an install instruction an agent can follow
+  aab version
+
+--known takes JSON so the tool does not have to guess:
+  aab latest --known '{"agent":"codex","project":"/path/to/repo","session":"01a16729","turns":"last:5"}'
+  Explicit flags win over same-named fields in --known.
+
+Output language: AAB_LANG=zh|en overrides; otherwise LC_ALL / LANG (English by default).
+Conversation text is never translated — only the surrounding labels.`;
+
+const helpText = () => (isZh() ? HELP_ZH : HELP_EN);
 
 /* ── 入口 ── */
 export async function runCli(argv) {
@@ -256,8 +301,8 @@ export async function runCli(argv) {
     case "help":
     case "--help":
     case "-h":
-      return HELP;
+      return helpText();
     default:
-      return `未知命令 ${cmd}\n\n${HELP}`;
+      return tr("cli.unknownCmd", { cmd }) + "\n\n" + helpText();
   }
 }

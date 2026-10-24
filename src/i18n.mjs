@@ -158,3 +158,14 @@ export function t(id, vars = {}) {
 }
 
 export const isZh = () => LANG === "zh";
+
+/** 两种语言的键必须一一对应；返回缺失明细（测试用） */
+export function validateDict() {
+  const zh = Object.keys(DICT.zh);
+  const en = Object.keys(DICT.en);
+  return {
+    missingInEn: zh.filter((k) => !(k in DICT.en)),
+    missingInZh: en.filter((k) => !(k in DICT.zh)),
+    size: zh.length,
+  };
+}

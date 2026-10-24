@@ -66,7 +66,7 @@ export function doctor() {
   if (stable !== process.execPath) lines.push(`          ${tr("doc.node.hint", { node: stable })}`);
   lines.push(`  script  ${script}`);
   const rm = runtimeMode(script);
-  const modeLabel = rm.mode === "npx 缓存" ? tr("doc.mode.npx") : rm.dev ? tr("doc.mode.dev") : tr("doc.mode.installed");
+  const modeLabel = tr({ dev: "doc.mode.dev", installed: "doc.mode.installed", npx: "doc.mode.npx" }[rm.kind]);
   lines.push(`  mode    ${modeLabel}`);
   const onPath = tryRun("which", ["aab"]);
   lines.push(`  PATH    ${onPath ? `aab → ${onPath}` : tr("doc.path.missing")}`);

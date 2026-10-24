@@ -12,6 +12,7 @@ import path from "node:path";
 import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection, runtimeMode } from "../src/install.mjs";
+import { validateDict } from "../src/i18n.mjs";
 
 const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
@@ -352,10 +353,17 @@ check("能区分开发态 / 安装态 / npx", () => {
   const dev = runtimeMode("/Users/x/dev/proj/bin/aab.mjs");
   const inst = runtimeMode("/opt/homebrew/lib/node_modules/@tianemon/ai-agent-bridge/bin/aab.mjs");
   const npx = runtimeMode("/Users/x/.npm/_npx/abc123/node_modules/@tianemon/ai-agent-bridge/bin/aab.mjs");
-  if (!dev.dev || dev.mode !== "开发目录") throw new Error(`开发态判定错: ${JSON.stringify(dev)}`);
-  if (inst.dev || inst.mode !== "npm 全局安装") throw new Error(`安装态判定错: ${JSON.stringify(inst)}`);
-  if (npx.dev || npx.mode !== "npx 缓存") throw new Error(`npx 判定错: ${JSON.stringify(npx)}`);
-  return "三种运行位置都能分辨";
+  if (dev.kind !== "dev" || !dev.dev) throw new Error(`开发态判定错: ${JSON.stringify(dev)}`);
+  if (inst.kind !== "installed" || inst.dev) throw new Error(`安装态判定错: ${JSON.stringify(inst)}`);
+  if (npx.kind !== "npx" || npx.dev) throw new Error(`npx 判定错: ${JSON.stringify(npx)}`);
+  return "三种运行位置都能分辨（返回语义 key）";
+});
+
+check("中英字典键一一对应", () => {
+  const v = validateDict();
+  if (v.missingInEn.length) throw new Error(`英文缺键: ${v.missingInEn.join(", ")}`);
+  if (v.missingInZh.length) throw new Error(`中文缺键: ${v.missingInZh.join(", ")}`);
+  return `${v.size} 个键两语齐全`;
 });
 
 check("findSession 取最近活动的那个（同前缀不误选）", () => {

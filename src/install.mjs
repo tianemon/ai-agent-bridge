@@ -20,9 +20,10 @@ const FALLBACK_NODES = ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/b
 
 /** 这份代码是从哪儿跑的：决定配置里写什么，也决定"这是开发态还是正式安装" */
 export function runtimeMode(script) {
-  if (/[\\/]_npx[\\/]/.test(script)) return { mode: "npx 缓存", dev: false };
-  if (/[\\/]node_modules[\\/]/.test(script)) return { mode: "npm 全局安装", dev: false };
-  return { mode: "开发目录", dev: true };
+  // 只返回语义 key；显示文案交给 i18n，逻辑不依赖任何一国的字符串
+  if (/[\\/]_npx[\\/]/.test(script)) return { kind: "npx", dev: false };
+  if (/[\\/]node_modules[\\/]/.test(script)) return { kind: "installed", dev: false };
+  return { kind: "dev", dev: true };
 }
 
 export function resolveNode() {

@@ -11,9 +11,10 @@
 import codex from "./agents/codex.mjs";
 import claude from "./agents/claude.mjs";
 import easymint from "./agents/easymint.mjs";
+import { workbuddy, codebuddy } from "./agents/codebuddy.mjs";
 import { lastMtime, sameProject } from "./agents/_shared.mjs";
 
-const LIST = [codex, claude, easymint];
+const LIST = [codex, claude, easymint, workbuddy, codebuddy];
 
 export const AGENTS = LIST.map((a) => a.name);
 export const AGENT_LABEL = Object.fromEntries(LIST.map((a) => [a.name, a.label]));

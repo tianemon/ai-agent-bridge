@@ -42,10 +42,30 @@ export function textOf(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((b) => b && (b.type === "text" || b.type === "Text" || b.type === "input_text"))
+    .filter((b) => b && ["text", "Text", "input_text", "output_text"].includes(b.type))
     .map((b) => b.text || "")
     .join("\n")
     .trim();
+}
+
+/** 剥掉消息开头包裹的 XML 块（<system-reminder> 之类），只留真正的人话 */
+export function stripLeadingBlocks(t) {
+  let s = String(t || "").trimStart();
+  const RE = /^<([a-zA-Z][\w:-]*)\b[^>]*>[\s\S]*?<\/\1>\s*/;
+  for (let i = 0; i < 8; i++) {
+    const m = s.match(RE);
+    if (!m) break;
+    s = s.slice(m[0].length);
+  }
+  return s.trim();
+}
+
+/** 从包装里取出真正的人话：优先 <user_query>，否则剥掉外层块 */
+export function userPromptOf(t) {
+  const s = String(t || "");
+  const m = s.match(/<user_query>([\s\S]*?)<\/user_query>/);
+  if (m) return m[1].trim();
+  return stripLeadingBlocks(s);
 }
 
 /** 用户消息里那些"注入的"条目不算需求 */

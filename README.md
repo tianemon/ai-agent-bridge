@@ -152,10 +152,18 @@ Default is **this project**: the working directory, resolved to its git root. Us
 |---|---|---|
 | Codex | `<home>/.codex/sessions/**/rollout-*.jsonl` | `CODEX_HOME` |
 | Claude Code | `<home>/.claude/projects/<slug>/<uuid>.jsonl` | `CLAUDE_CONFIG_DIR` |
+| WorkBuddy | `<home>/.workbuddy/projects/<slug>/<uuid>.jsonl` | `WORKBUDDY_HOME` |
+| CodeBuddy | `<home>/.codebuddy/projects/<slug>/<uuid>.jsonl` | `CODEBUDDY_HOME` |
 | EasyMint | `<home>/.easymint/agent/sessions/--<slug>--/<ts>_<id>.jsonl` | `EASYMINT_HOME` |
 
+WorkBuddy and CodeBuddy share one writer (their transcripts even carry a `__codebuddyLocal` field), so a
+single adapter covers both: `type:"message"` with `input_text` / `output_text` blocks, plus
+`function_call` / `function_call_result` / `reasoning` / `file-history-snapshot` lines that we skip.
+WorkBuddy wraps the user's prompt in a `<system-reminder>` envelope — the real text is inside
+`<user_query>`, which is what we read.
+
 Sub-agent traces (`subagents/*.jsonl`) are **deliberately excluded** — they are internal delegation
-steps, not conversations with you. On this author's machine that is 622 sub-agent trace files filtered out of 706 JSONL files (63 real sessions).
+steps, not conversations with you. Sub-agent traces (`subagents/*.jsonl`, `agent-*.jsonl`) are excluded by design — on the author's machine that filters out hundreds of files while keeping every real conversation.
 
 Facts verified against real data: Codex groups multiple files per thread by `session_meta.session_id`
 (resumed threads write a new rollout file), Claude Code is one file per session, and compaction
@@ -186,7 +194,6 @@ then add it to `LIST` in `src/registry.mjs`. Nothing else changes.
 
 - **Read-only.** Writes nothing to any tool's data directory. The only external processes are
   `git log`, `git status`, `git rev-parse` — fixed arguments, no shell.
-- Cannot read tools whose sessions are not plain JSONL (e.g. WorkBuddy stores no external transcript).
 - Windows is untested. Directory-slug fallbacks assume POSIX paths; the primary `cwd` judgement reads
   it from the file itself, so this only affects sessions whose header lacks `cwd`.
 - Not a session *browser*. If you want a UI and full-text search over transcripts, something like

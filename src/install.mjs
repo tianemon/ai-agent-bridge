@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, approvalState, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, recordEntry, NAME, LEGACY } from "./hosts.mjs";
 
 const TOML_HEADER = "[mcp_servers.aab]";
 
@@ -103,6 +103,7 @@ function applyWorkbuddy({ dryRun }) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const bak = backup(file);
   fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
+  recordEntry("workbuddy", entry);
   return {
     ok: true,
     msg: `已写入 ${file}${bak ? `（备份 ${path.basename(bak)}）` : ""}${dropped.length ? `，并移除旧名 ${dropped.join(", ")}` : ""}`,

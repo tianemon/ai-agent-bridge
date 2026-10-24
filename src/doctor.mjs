@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
-import { HOSTS, detectHosts, registered, approvalState, NAME } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, entryUnchanged, NAME } from "./hosts.mjs";
 import { resolveNode, runtimeMode } from "./install.mjs";
 
 const existsDir = (p) => {
@@ -109,6 +109,8 @@ export function doctor() {
       const a = approvalState(name);
       if (!a.approved) {
         status += " · ✗ 未信任 → 连接器 → 自定义连接器 → aab → 信任";
+      } else if (!entryUnchanged("workbuddy")) {
+        status += " · ⚠ 信任记录对应的是旧配置，改了路径后需重新点：连接器 → 自定义连接器 → aab → 信任";
       } else {
         const d = a.ts ? new Date(a.ts) : null;
         const pad = (n) => String(n).padStart(2, "0");

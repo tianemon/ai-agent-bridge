@@ -8,6 +8,7 @@
  * 检测一律"文件存在才算"，用户没装的客户端一个字都不写。
  */
 import fs from "node:fs";
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -101,6 +102,41 @@ export function approvalState(host) {
   // 只报事实：有没有信任记录、什么时候点的。
   // 不去比较配置 mtime——宿主自己也会重写 mcp.json，比出来的是假阳性。
   return { approved: true, ts: Number(map[hit]) || 0 };
+}
+
+/** 我们上次装进去的那条配置的指纹；用来判断"信任之后配置有没有变过" */
+const STATE_FILE = path.join(HOME, ".aab", "state.json");
+
+function readState() {
+  try {
+    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function recordEntry(host, entry) {
+  const st = readState();
+  st[host] = {
+    hash: crypto.createHash("sha256").update(JSON.stringify(entry)).digest("hex").slice(0, 16),
+    ts: Date.now(),
+  };
+  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+  fs.writeFileSync(STATE_FILE, JSON.stringify(st, null, 2) + "\n");
+}
+
+/** 当前配置 vs 我们上次写的：false = 配置在安装后被改过（信任大概率失效） */
+export function entryUnchanged(host) {
+  const rec = readState()[host]?.hash;
+  if (!rec) return true; // 没有记录就不下结论
+  if (host !== "workbuddy") return true;
+  try {
+    const cur = JSON.parse(fs.readFileSync(HOSTS.workbuddy.config, "utf8"))?.mcpServers?.[NAME];
+    const now = crypto.createHash("sha256").update(JSON.stringify(cur)).digest("hex").slice(0, 16);
+    return now === rec;
+  } catch {
+    return true;
+  }
 }
 
 export function detectHosts() {

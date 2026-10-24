@@ -10,8 +10,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildLevels } from "../src/ladder.mjs";
+import { dropTomlSection } from "../src/install.mjs";
 
-const SB = new URL("../bin/pickup.mjs", import.meta.url).pathname;
+const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
 const results = [];
 
@@ -249,7 +250,7 @@ check("grep 正则元字符按字面处理", () => {
 
 /* ── 作用域 ── */
 check("无会话的项目目录 → 退全机并注明", () => {
-  const dir = path.join(os.tmpdir(), "pickup-empty-proj");
+  const dir = path.join(os.tmpdir(), "aab-empty-proj");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "package.json"), "{}");
   const r = run(["latest"], dir);
@@ -259,7 +260,7 @@ check("无会话的项目目录 → 退全机并注明", () => {
 });
 
 check("scope=project 严格不回退", () => {
-  const dir = path.join(os.tmpdir(), "pickup-empty-proj");
+  const dir = path.join(os.tmpdir(), "aab-empty-proj");
   const r = run(["latest", "--scope", "project"], dir);
   noCrash(r);
   has(r.out, "不回退");
@@ -288,6 +289,34 @@ check("level=1 未收尾时给出上一轮结论", () => {
   return "退路指向第 2 轮";
 });
 
+check("TOML 段落能被完整摘掉（含重复）", () => {
+  const src = ["a = 1", "", "[mcp_servers.aab]", "command = \"x\"", "", "[mcp_servers.pickup]", "command = \"y\"", "", "[mcp_servers.aab]", "command = \"z\"", "", "[other]", "k = 1"].join("\n");
+  const one = dropTomlSection(src, "[mcp_servers.aab]");
+  if (one.includes("[mcp_servers.aab]")) throw new Error("仍有 aab 段落");
+  if (!one.includes("[mcp_servers.pickup]")) throw new Error("误删了别的段落");
+  if (!one.includes("[other]")) throw new Error("误删了尾随段落");
+  const both = dropTomlSection(one, "[mcp_servers.pickup]");
+  if (both.includes("pickup")) throw new Error("pickup 未清掉");
+  return "重复段落一次清完";
+});
+
+check("重复执行 install 不会累积 TOML 段落", () => {
+  const home = path.join(os.tmpdir(), "aab-toml-home");
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.mkdirSync(path.join(home, ".codex"), { recursive: true });
+  const cfg = path.join(home, ".codex", "config.toml");
+  fs.writeFileSync(cfg, ["[mcp_servers.pickup]", "command = \"old\"", "", "[mcp_servers.aab]", "command = \"dup\"", ""].join("\n"));
+  for (let i = 0; i < 2; i++) {
+    const r = spawnSync(NODE, [SB, "install", "--agent", "codex"], { encoding: "utf8", env: { ...process.env, HOME: home }, timeout: 30000 });
+    if (r.status !== 0) throw new Error(`第 ${i + 1} 次 install 失败: ${r.stderr.slice(0, 120)}`);
+  }
+  const text = fs.readFileSync(cfg, "utf8");
+  const n = (text.match(/^\[mcp_servers\.aab\]/gm) || []).length;
+  if (n !== 1) throw new Error(`aab 段落有 ${n} 个，应为 1`);
+  if (text.includes("[mcp_servers.pickup]")) throw new Error("pickup 段落未清掉");
+  return "1 段，旧名已清";
+});
+
 check("未知工具被拒绝，不静默降级", () => {
   const r = run(["latest", "--agent", "cursor"]);
   noCrash(r);
@@ -306,8 +335,8 @@ check("version 输出版本号", () => {
 check("prompt 给出 agent 自安装指令", () => {
   const r = run(["prompt"]);
   noCrash(r);
-  has(r.out, "@tianemon/agent-session-bridge install");
-  has(r.out, "@tianemon/agent-session-bridge doctor");
+  has(r.out, "@tianemon/ai-agent-bridge install");
+  has(r.out, "@tianemon/ai-agent-bridge doctor");
   return "含安装与验证两步";
 });
 

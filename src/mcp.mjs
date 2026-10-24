@@ -20,7 +20,7 @@ const PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-30"];
  * 这段则可能常驻上下文——所以触发词和"别做什么"都放这儿。
  */
 const INSTRUCTIONS = [
-  "pickup：读【另一个 AI 编码工具】（codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy）的会话。",
+  "aab：读【另一个 AI 编码工具】（codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy）的会话。",
   "用户说「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」时，用 session_latest，",
   "默认 level=1（约 100 token），不够再逐层加 level；已知轮次用 turns 直接锚定。",
   "不要用 shell 手工解析 rollout-*.jsonl 或会话 sqlite —— 单条线程可达 50MB 以上，会把上下文撑爆。",
@@ -157,7 +157,7 @@ export function serveMcp() {
         result: {
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
           capabilities: { tools: {} },
-          serverInfo: { name: "pickup", version: VERSION },
+          serverInfo: { name: "aab", version: VERSION },
           instructions: INSTRUCTIONS,
         },
       });
@@ -187,5 +187,5 @@ export function serveMcp() {
     send({ jsonrpc: "2.0", id, error: { code: -32601, message: `unknown method: ${method}` } });
   });
 
-  process.stderr.write("pickup mcp ready\n");
+  process.stderr.write("aab mcp ready\n");
 }

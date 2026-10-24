@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * pickup 入口。两种形态：
+ * ai-agent-bridge 入口。两种形态：
  *
- *   pickup <command>    一次性 CLI
- *   pickup mcp          常驻 stdio MCP server
+ *   aab <command>    一次性 CLI
+ *   aab mcp          常驻 stdio MCP server
  */
 import { runCli } from "../src/cli.mjs";
 import { serveMcp } from "../src/mcp.mjs";

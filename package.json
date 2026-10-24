@@ -1,10 +1,11 @@
 {
-  "name": "@tianemon/agent-session-bridge",
-  "version": "0.2.1",
+  "name": "@tianemon/ai-agent-bridge",
+  "version": "0.3.0",
   "description": "Read another AI coding tool's session — newest conclusion first, escalate only as far as you need.",
   "type": "module",
   "bin": {
-    "pickup": "./bin/pickup.mjs"
+    "aab": "./bin/aab.mjs",
+    "agent-bridge": "./bin/aab.mjs"
   },
   "main": "./src/registry.mjs",
   "files": [
@@ -18,8 +19,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node bin/pickup.mjs",
-    "mcp": "node bin/pickup.mjs mcp",
+    "start": "node bin/aab.mjs",
+    "mcp": "node bin/aab.mjs mcp",
     "test": "node test/run.mjs"
   },
   "keywords": [
@@ -40,10 +41,10 @@
   "author": "tianemon <811978297@qq.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tianemon/agent-session-bridge.git"
+    "url": "git+https://github.com/tianemon/ai-agent-bridge.git"
   },
-  "homepage": "https://github.com/tianemon/agent-session-bridge#readme",
+  "homepage": "https://github.com/tianemon/ai-agent-bridge#readme",
   "bugs": {
-    "url": "https://github.com/tianemon/agent-session-bridge/issues"
+    "url": "https://github.com/tianemon/ai-agent-bridge/issues"
   }
 }

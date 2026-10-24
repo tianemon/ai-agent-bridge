@@ -1,10 +1,10 @@
 /**
  * CLI：一次性执行，打印结果就退出。
  *
- *   pickup latest --agent codex --level 1
- *   pickup latest --session 01a16729 --turns 40-41
- *   pickup list --since 24h
- *   pickup grep "关键词" --agent codex
+ *   aab latest --agent codex --level 1
+ *   aab latest --session 01a16729 --turns 40-41
+ *   aab list --since 24h
+ *   aab grep "关键词" --agent codex
  */
 import path from "node:path";
 import fs from "node:fs";
@@ -173,7 +173,7 @@ export function actList(o) {
 
 export async function actGrep(o) {
   const q = String(o._[0] || o._[1] || "").trim();
-  if (!q || q === "true") return '用法：pickup grep "关键词" [--agent codex] [--since 24h] [--limit 8]';
+  if (!q || q === "true") return '用法：aab grep "关键词" [--agent codex] [--since 24h] [--limit 8]';
   const input = resolveInputs(o.known, o);
   const bad = agentGuard(input.agent);
   if (bad) return bad;
@@ -190,10 +190,10 @@ export async function actGrep(o) {
   });
 }
 
-const HELP = `pickup —— 从另一个 AI 编码工具的会话接着干，只给够用的那一层
+const HELP = `aab —— 从另一个 AI 编码工具的会话接着干，只给够用的那一层
 
 用法：
-  pickup latest   从最新一条结论开始（默认 level=1，不够再加）
+  aab latest   从最新一条结论开始（默认 level=1，不够再加）
       --agent codex|claude|easymint|auto   默认 auto（三家里最新的）
       --level 1..4                         1=结论 2=最近3轮 3=需求时间线 4=命令/文件/git
       --session <id 前缀>                   直接锚定某次会话
@@ -204,19 +204,19 @@ const HELP = `pickup —— 从另一个 AI 编码工具的会话接着干，只
       --max-chars N                         单次输出上限
       --known '<json>'                      调用方已知的信息（见下）
 
-  pickup list     [--limit 15] [--since 24h] [--agent ...] [--scope ...]
-  pickup read     [--session <id>] [--turns 12-14] [--level N]
-  pickup grep     "关键词" [--agent ...] [--since ...] [--limit 8]
-  pickup mcp      stdio MCP server
-  pickup install  [--agent workbuddy,codex,claude] [--dry-run]
+  aab list     [--limit 15] [--since 24h] [--agent ...] [--scope ...]
+  aab read     [--session <id>] [--turns 12-14] [--level N]
+  aab grep     "关键词" [--agent ...] [--since ...] [--limit 8]
+  aab mcp      stdio MCP server
+  aab install  [--agent workbuddy,codex,claude] [--dry-run]
                  只给本机确实装了的客户端注册 MCP；不给 --agent 就自动探测
-  pickup doctor                                                 诊断：能读到谁、哪个客户端还没挂上
-  pickup agents                                                列出能读哪些工具的会话
-  pickup prompt                                                 打印一段可直接粘给任意 agent 的安装指令
-  pickup version
+  aab doctor                                                 诊断：能读到谁、哪个客户端还没挂上
+  aab agents                                                列出能读哪些工具的会话
+  aab prompt                                                 打印一段可直接粘给任意 agent 的安装指令
+  aab version
 
 --known 可传 JSON，让工具不用猜：
-  pickup latest --known '{"agent":"codex","project":"/path/to/repo","session":"01a16729","turns":"last:5"}'
+  aab latest --known '{"agent":"codex","project":"/path/to/repo","session":"01a16729","turns":"last:5"}'
   显式参数优先于 --known 里的同名字段。`;
 
 /* ── 入口 ── */
@@ -252,7 +252,7 @@ export async function runCli(argv) {
     case "version":
     case "--version":
     case "-v":
-      return `pickup ${VERSION}`;
+      return `aab ${VERSION}`;
     case "help":
     case "--help":
     case "-h":

@@ -12,7 +12,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { HOSTS, detectHosts, registered, approvalState, NAME, LEGACY } from "./hosts.mjs";
 
-const TOML_HEADER = "[mcp_servers.pickup]";
+const TOML_HEADER = "[mcp_servers.aab]";
 
 /** 尽量别把 MCP 命令钉在"某个工具自带的 node"上：那套运行时可能被换掉或升级掉 */
 const MANAGED_NODE = /[\\/]\.workbuddy[\\/]|[\\/]_npx[\\/]|[\\/]node_modules[\\/]/;
@@ -31,7 +31,7 @@ export function resolveNode() {
   return process.execPath;
 }
 
-const PKG = "@tianemon/agent-session-bridge";
+const PKG = "@tianemon/ai-agent-bridge";
 
 /**
  * 配置里写什么命令，取决于"现在这份代码在哪里被运行"：
@@ -39,26 +39,30 @@ const PKG = "@tianemon/agent-session-bridge";
  *   npx 缓存（~/.npm/_npx/…）  → 缓存会被清掉，绝不能钉在里面，改用 npx 解析
  */
 function commandFor() {
-  const script = fs.realpathSync(new URL("../bin/pickup.mjs", import.meta.url).pathname);
+  const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
   if (/[\\/]_npx[\\/]/.test(script)) {
     return { command: "npx", args: ["-y", PKG, "mcp"], note: "（从 npx 缓存运行，改为让 npx 解析包名）" };
   }
   return { command: resolveNode(), args: [script, "mcp"], note: "" };
 }
 
-/** 从 TOML 里摘掉一个段落：标题行到下一个顶层表头之前 */
-function dropTomlSection(text, header) {
-  const lines = text.split("\n");
-  const start = lines.findIndex((l) => l.trim() === header);
-  if (start < 0) return text;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^\[/.test(lines[i])) {
-      end = i;
-      break;
+/** 从 TOML 里摘掉一个段落：标题行到下一个顶层表头之前。
+ *  循环删到没有为止——同一段落可能因为历史写入残留多份（实测出现过重复）。 */
+export function dropTomlSection(text, header) {
+  let out = text;
+  for (;;) {
+    const lines = out.split("\n");
+    const start = lines.findIndex((l) => l.trim() === header);
+    if (start < 0) return out;
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i++) {
+      if (/^\[/.test(lines[i])) {
+        end = i;
+        break;
+      }
     }
+    out = [...lines.slice(0, start), ...lines.slice(end)].join("\n");
   }
-  return [...lines.slice(0, start), ...lines.slice(end)].join("\n");
 }
 
 function backup(file) {
@@ -126,19 +130,9 @@ function applyCodex({ dryRun }) {
     cleaned = dropTomlSection(cleaned, h);
     if (cleaned !== before) removed = true;
   }
-  const lines = cleaned.split("\n");
-  const start = lines.findIndex((l) => l.trim() === TOML_HEADER);
-  let next = text;
-  if (start >= 0) {
-    let end = lines.length;
-    for (let i = start + 1; i < lines.length; i++) {
-      if (/^\[/.test(lines[i])) {
-        end = i;
-        break;
-      }
-    }
-    next = [...lines.slice(0, start), ...lines.slice(end)].join("\n");
-  }
+  // 注意：这里必须基于 cleaned（已摘掉同名/旧名段落），
+  // 早前写成 next = text 导致每跑一次就多追加一段（实测出现过三段重复）
+  const next = cleaned;
   if (dryRun) return { ok: true, msg: `将写入 ${file}${removed ? "（替换原有段落）" : ""}` };
 
   const bak = backup(file);
@@ -154,7 +148,7 @@ function applyClaude({ dryRun }) {
   const reg = registered("claude");
   if (reg === null) return { ok: false, msg: "找不到 claude CLI，跳过" };
   if (reg) return { ok: true, msg: "已注册（如需改成别的寻址方式先 claude mcp remove）" };
-  if (dryRun) return { ok: true, msg: "将执行 claude mcp add --scope user pickup …" };
+  if (dryRun) return { ok: true, msg: "将执行 claude mcp add --scope user agent-bridge …" };
 
   const { command, args } = commandFor();
   try {
@@ -163,7 +157,7 @@ function applyClaude({ dryRun }) {
       timeout: 30000,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return { ok: true, msg: "已注册（scope=user）" };
+    return { ok: true, msg: `已注册（scope=user）${dropped.length ? `，并移除旧名 ${dropped.join(", ")}` : ""}` };
   } catch (e) {
     return { ok: false, msg: `注册失败：${String(e.stderr || e.message).split("\n")[0]}` };
   }
@@ -184,7 +178,7 @@ export function install({ targets, dryRun = false } = {}) {
 
   const { command, args, note } = commandFor();
   const out = [
-    `pickup 安装${dryRun ? "（dry-run，不写任何文件）" : ""}`,
+    `aab 安装${dryRun ? "（dry-run，不写任何文件）" : ""}`,
     `  MCP 命令  ${command} ${args.join(" ")}${note}`,
     `  探测到    ${detected.length ? detected.map((h) => HOSTS[h].label).join("、") : "（没有已安装的宿主）"}`,
     "",
@@ -202,7 +196,7 @@ export function install({ targets, dryRun = false } = {}) {
 
   out.push("");
   if (!chosen.length) {
-    out.push("没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y @tianemon/agent-session-bridge mcp`。");
+    out.push("没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y @tianemon/ai-agent-bridge mcp`。");
     return out.join("\n");
   }
 
@@ -210,7 +204,7 @@ export function install({ targets, dryRun = false } = {}) {
   const wb = chosen.includes("workbuddy") ? approvalState("workbuddy") : null;
   if (wb && !wb.approved) {
     out.push("⚠ WorkBuddy 还需要点一次信任，否则 MCP 不会加载：");
-    out.push("   连接器 → 自定义连接器 → pickup → 信任");
+    out.push("   连接器 → 自定义连接器 → aab → 信任");
     out.push("   （这一步没法自动化：信任记录由 WorkBuddy 自己写，工具代写等于绕过安全闸）");
   }
   out.push("下一步：新开一个会话（或重连连接器）后 MCP 才会加载。");

@@ -34,7 +34,7 @@ function tryRun(cmd, args) {
 
 /** 已注册但脚本路径不存在 → 是坏配置（挪过目录/卸载过），不是"已就绪" */
 function staleEntry(host) {
-  const scriptOf = (entry) => (Array.isArray(entry?.args) ? entry.args.find((a) => /pickup\.mjs$/.test(a)) : "");
+  const scriptOf = (entry) => (Array.isArray(entry?.args) ? entry.args.find((a) => /aab\.mjs$/.test(a)) : "");
   try {
     if (host === "workbuddy") {
       const cfg = JSON.parse(fs.readFileSync(HOSTS.workbuddy.config, "utf8"));
@@ -58,14 +58,14 @@ function staleEntry(host) {
 }
 
 export function doctor() {
-  const script = fs.realpathSync(new URL("../bin/pickup.mjs", import.meta.url).pathname);
+  const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
   const lines = ["■ 运行时"];
   lines.push(`  node    ${process.version}  ${process.execPath}`);
   const stable = resolveNode();
   if (stable !== process.execPath) lines.push(`          （这是宿主自带的 node；写进配置时会改用 ${stable}）`);
   lines.push(`  script  ${script}`);
-  const onPath = tryRun("which", ["pickup"]);
-  lines.push(`  PATH    ${onPath ? `pickup → ${onPath}` : "未装到 PATH（npx / 绝对路径调用不受影响）"}`);
+  const onPath = tryRun("which", ["aab"]);
+  lines.push(`  PATH    ${onPath ? `aab → ${onPath}` : "未装到 PATH（npx / 绝对路径调用不受影响）"}`);
   lines.push("");
 
   lines.push("■ 会话来源（能读谁的会话）");
@@ -106,7 +106,7 @@ export function doctor() {
     if (reg && name === "workbuddy") {
       const a = approvalState(name);
       if (!a.approved) {
-        status += " · ✗ 未信任 → 连接器 → 自定义连接器 → pickup → 信任";
+        status += " · ✗ 未信任 → 连接器 → 自定义连接器 → aab → 信任";
       } else {
         const d = a.ts ? new Date(a.ts) : null;
         const pad = (n) => String(n).padStart(2, "0");
@@ -124,14 +124,14 @@ export function doctor() {
 
   const missing = detected.filter((h) => registered(h) === false);
   if (missing.length) {
-    lines.push(`结论：${missing.map((h) => HOSTS[h].label).join("、")} 已安装但没注册 → 跑 pickup install`);
+    lines.push(`结论：${missing.map((h) => HOSTS[h].label).join("、")} 已安装但没注册 → 跑 aab install`);
   } else if (!detected.length) {
-    lines.push("结论：没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y @tianemon/agent-session-bridge mcp");
+    lines.push("结论：没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y @tianemon/ai-agent-bridge mcp");
   } else {
     const wbUntrusted = detected.includes("workbuddy") && registered("workbuddy") && !approvalState("workbuddy").approved;
     lines.push(
       wbUntrusted
-        ? "结论：配置都写好了，但 WorkBuddy 还没点信任 → 连接器 → 自定义连接器 → pickup → 信任（点完新开会话）"
+        ? "结论：配置都写好了，但 WorkBuddy 还没点信任 → 连接器 → 自定义连接器 → aab → 信任（点完新开会话）"
         : "结论：已安装的客户端都已注册。改完配置需新开会话（WorkBuddy 可能还要点一次 Trust）。"
     );
   }

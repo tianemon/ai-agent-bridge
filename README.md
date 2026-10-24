@@ -1,4 +1,4 @@
-# agent-session-bridge
+# ai-agent-bridge
 
 Read another AI coding tool's session — **newest conclusion first, escalate only as far as you need**.
 
@@ -54,41 +54,42 @@ about to continue someone else's work.
 
 ## Install — let your agent do it
 
-Published as **`@tianemon/agent-session-bridge`**; the command it installs is **`pickup`** — short for
-*where the previous tool left off*, because that is what an agent types dozens of times a day.
+Published as **`@tianemon/ai-agent-bridge`**; the command it installs is **`aab`** (ai-agent-bridge),
+because that is what an agent types dozens of times a day. `agent-bridge` is installed as an alias for
+the rare case where `aab` collides with something else on your `PATH`.
 
 Give this to any coding agent (Claude Code, Codex, WorkBuddy, whatever you use):
 
-> Run `npx -y @tianemon/agent-session-bridge install`, then
-> `npx -y @tianemon/agent-session-bridge doctor`, and show me the output.
+> Run `npx -y @tianemon/ai-agent-bridge install`, then
+> `npx -y @tianemon/ai-agent-bridge doctor`, and show me the output.
 
 `install` **detects which clients actually exist on this machine and writes only to those**. Clients
 you have not installed are skipped, never assumed. Everything it touches is backed up first, and it is
 idempotent — re-running it changes nothing.
 
 ```bash
-npx -y @tianemon/agent-session-bridge install --dry-run    # show what it would write
-npx -y @tianemon/agent-session-bridge doctor               # what can be read, which hosts are wired up
-npx -y @tianemon/agent-session-bridge prompt               # the agent-facing instruction block
+npx -y @tianemon/ai-agent-bridge install --dry-run    # show what it would write
+npx -y @tianemon/ai-agent-bridge doctor               # what can be read, which hosts are wired up
+npx -y @tianemon/ai-agent-bridge prompt               # the agent-facing instruction block
 ```
 
 Or keep a permanent command (the checkout is symlinked, so edits take effect immediately):
 
 ```bash
-git clone https://github.com/tianemon/agent-session-bridge ~/dev/agent-session-bridge
-cd ~/dev/agent-session-bridge && npm link     # puts `pickup` on PATH
-npm unlink -g @tianemon/agent-session-bridge  # uninstall
+git clone https://github.com/tianemon/ai-agent-bridge ~/dev/ai-agent-bridge
+cd ~/dev/ai-agent-bridge && npm link     # puts `aab` on PATH
+npm unlink -g @tianemon/ai-agent-bridge  # uninstall
 ```
 
 No dependencies, no build step, Node ≥ 18. Without any install, everything works as
-`node <path>/bin/pickup.mjs <cmd>`.
+`node <path>/bin/aab.mjs <cmd>`.
 
 ## Use as MCP server
 
-The server is `pickup mcp` (stdio). `install` writes this for you; the manual form is below if you want
+The server is `aab mcp` (stdio). `install` writes this for you; the manual form is below if you want
 to do it yourself or your client isn't covered yet.
 
-> Terminal hosts (Claude Code, Codex CLI) can use the short `pickup mcp`; GUI hosts (WorkBuddy, Codex
+> Terminal hosts (Claude Code, Codex CLI) can use the short `aab mcp`; GUI hosts (WorkBuddy, Codex
 > Desktop) may spawn children with a minimal `PATH`, so give them an absolute command.
 
 **WorkBuddy** — `~/.workbuddy/mcp.json`
@@ -96,9 +97,9 @@ to do it yourself or your client isn't covered yet.
 ```json
 {
   "mcpServers": {
-    "pickup": {
+    "aab": {
       "command": "/opt/homebrew/bin/node",
-      "args": ["/Users/you/dev/pickup/bin/pickup.mjs", "mcp"]
+      "args": ["/Users/you/dev/ai-agent-bridge/bin/aab.mjs", "mcp"]
     }
   }
 }
@@ -107,30 +108,56 @@ to do it yourself or your client isn't covered yet.
 **Codex** — `~/.codex/config.toml`
 
 ```toml
-[mcp_servers.pickup]
+[mcp_servers.aab]
 command = "/opt/homebrew/bin/node"
-args = ["/Users/you/dev/pickup/bin/pickup.mjs", "mcp"]
+args = ["/Users/you/dev/ai-agent-bridge/bin/aab.mjs", "mcp"]
 startup_timeout_sec = 20
 ```
 
 **Claude Code**
 
 ```bash
-claude mcp add --scope user pickup pickup mcp
+claude mcp add --scope user agent-bridge aab mcp
 ```
 
 Tools exposed: `session_latest`, `session_list`, `session_read`, `session_grep`, `session_agents`.
 
+### WorkBuddy requires one manual click after installing
+
+WorkBuddy does not prompt when a new MCP server appears in its config, and it will not load one until you
+approve it. After `aab install` reaches WorkBuddy you must click once:
+
+```
+连接器 → 自定义连接器 → aab → 信任
+```
+
+`aab doctor` tells you the current state, so you never have to guess:
+
+```
+WorkBuddy    ✓ 已注册 · ✓ 已信任（2026-10-24 12:26）
+WorkBuddy    ✓ 已注册 · ✗ 未信任 → 连接器 → 自定义连接器 → aab → 信任
+```
+
+This step cannot be automated, by design: the approval record is WorkBuddy's own security gate —
+"a human confirms this server may run commands on this machine". A tool that writes its own approval
+would be defeating the gate, and would open the same hole for anything else that drops an entry into the
+config. If you would rather not click at all, two options:
+
+- `aab install --agent codex,claude` — skip WorkBuddy entirely
+- Use the CLI channel inside WorkBuddy instead of MCP: one line in the project's `CLAUDE.md` /
+  `AGENTS.md` telling the agent to run `aab latest` when it needs another tool's session
+  (no trust gate, but one shell round-trip per call)
+
 ## Use as CLI
 
 ```bash
-pickup list --since 24h                     # what happened lately, one line each
-pickup latest --agent codex --level 1       # newest conclusion only
-pickup latest --agent codex --level 3       # still not enough? go one layer deeper
-pickup latest --turns 40-41                 # you already know which turns you need
-pickup latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
-pickup read --session 53bf411c --level 2
-pickup grep "paths-ignore" --agent claude --limit 3
+aab list --since 24h                     # what happened lately, one line each
+aab latest --agent codex --level 1       # newest conclusion only
+aab latest --agent codex --level 3       # still not enough? go one layer deeper
+aab latest --turns 40-41                 # you already know which turns you need
+aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
+aab read --session 53bf411c --level 2
+aab grep "paths-ignore" --agent claude --limit 3
 ```
 
 `--known` accepts JSON and is how a model hands over what it already knows (tool, project, session,

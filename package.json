@@ -13,7 +13,8 @@
     "src",
     "index.mjs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "README.zh-CN.md"
   ],
   "engines": {
     "node": ">=18"

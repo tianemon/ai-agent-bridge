@@ -1,5 +1,7 @@
 # ai-agent-bridge
 
+**[English](README.md) · [简体中文](README.zh-CN.md)**
+
 Read another AI coding tool's session — **newest conclusion first, escalate only as far as you need**.
 
 Switch from Codex to Claude Code, or from Claude Code to any MCP-capable agent, and pick up where the
@@ -21,7 +23,8 @@ previous tool left off — without stuffing a 30 MB transcript into the context 
 ```
 
 Above: 101 tokens instead of the session's ~9M. The caller decides when to stop, because every layer
-reports what the next one costs.
+reports what the next one costs. (The tool's own output strings are Chinese for now; the sample above
+is verbatim output, not a translation.)
 
 ## Why
 
@@ -46,11 +49,11 @@ So this tool does three things:
 | 2 | last 3 turns (question + conclusion) | ~300 tok |
 | 3 | full requirement timeline + compaction summaries | ~1k tok |
 | 4 | files touched / commands / git state | ~3k tok |
-| `turns` | any explicit range (`12-14`, `last:5`) | you decide |
+| `turns` | any explicit slice (`12-14`, `last:5`, `from:60`, `around:40±2`) | you decide |
 
 When the last turn has no conclusion (interrupted, still running, or only a progress note), level 1
-says so instead of pretending the narration is a conclusion — that difference matters when you are
-about to continue someone else's work.
+says so instead of pretending the narration is a conclusion — and appends the most recent turn that
+does have one, with its turn number and token cost.
 
 ## Install — let your agent do it
 
@@ -62,8 +65,8 @@ Give this to any coding agent (Claude Code, Codex, WorkBuddy, whatever you use):
 
 > Run `npx -y @tianemon/ai-agent-bridge install`, then
 > `npx -y @tianemon/ai-agent-bridge doctor`, and show me the output. If the install output says WorkBuddy
-> is not trusted, tell me the click path it prints (连接器 → 自定义连接器 → aab → 信任) — I have to do
-> that part myself.
+> is not trusted, tell me the click path it prints (连接器 → 自定义连接器 → aab → 信任 /
+> Connectors → Custom connectors → aab → Trust) — I have to do that part myself.
 
 `install` **detects which clients actually exist on this machine and writes only to those**. Clients
 you have not installed are skipped, never assumed. Everything it touches is backed up first, and it is
@@ -75,16 +78,33 @@ npx -y @tianemon/ai-agent-bridge doctor               # what can be read, which 
 npx -y @tianemon/ai-agent-bridge prompt               # the agent-facing instruction block
 ```
 
-Or keep a permanent command (the checkout is symlinked, so edits take effect immediately):
+Or keep a permanent command:
 
 ```bash
 git clone https://github.com/tianemon/ai-agent-bridge ~/dev/ai-agent-bridge
-cd ~/dev/ai-agent-bridge && npm link     # puts `aab` on PATH
+cd ~/dev/ai-agent-bridge && npm link     # puts `aab` on PATH (symlink: edits take effect immediately)
 npm unlink -g @tianemon/ai-agent-bridge  # uninstall
 ```
 
 No dependencies, no build step, Node ≥ 18. Without any install, everything works as
 `node <path>/bin/aab.mjs <cmd>`.
+
+### Development vs installed copy
+
+`aab doctor` prints which copy you are running:
+
+```
+mode    npm 全局安装（正式安装）        # installed copy — what production should use
+mode    开发目录（开发态：…）           # dev checkout — configs point at source, edits apply live
+mode    npx 缓存                       # npx cache — configs point at `npx -y …`
+```
+
+`npm link` is for developing; for production install a real copy:
+
+```bash
+npm pack && npm i -g ./tianemon-ai-agent-bridge-<version>.tgz
+aab install      # rewrite host configs to the new path
+```
 
 ## Use as MCP server
 
@@ -119,7 +139,7 @@ startup_timeout_sec = 20
 **Claude Code**
 
 ```bash
-claude mcp add --scope user agent-bridge aab mcp
+claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-bridge/bin/aab.mjs mcp
 ```
 
 Tools exposed: `session_latest`, `session_list`, `session_read`, `session_grep`, `session_agents`.
@@ -131,6 +151,7 @@ approve it. After `aab install` reaches WorkBuddy you must click once:
 
 ```
 连接器 → 自定义连接器 → aab → 信任
+Connectors → Custom connectors → aab → Trust
 ```
 
 `aab doctor` tells you the current state, so you never have to guess:
@@ -138,6 +159,7 @@ approve it. After `aab install` reaches WorkBuddy you must click once:
 ```
 WorkBuddy    ✓ 已注册 · ✓ 已信任（2026-10-24 12:26）
 WorkBuddy    ✓ 已注册 · ✗ 未信任 → 连接器 → 自定义连接器 → aab → 信任
+WorkBuddy    ✓ 已注册 · ⚠ 信任记录对应的是旧配置，需重新点
 ```
 
 This step cannot be automated, by design: the approval record is WorkBuddy's own security gate —
@@ -167,7 +189,8 @@ aab grep "paths-ignore" --agent claude --limit 3
 ```
 
 `--known` accepts JSON and is how a model hands over what it already knows (tool, project, session,
-turn range, time window). Explicit flags win over `known` fields.
+turn range, time window). Explicit flags win over `known` fields. In MCP the same knobs are
+`known` and `maxChars`.
 
 ## Scope
 
@@ -195,8 +218,9 @@ single adapter covers both: `type:"message"` with `input_text` / `output_text` b
 WorkBuddy wraps the user's prompt in a `<system-reminder>` envelope — the real text is inside
 `<user_query>`, which is what we read.
 
-Sub-agent traces (`subagents/*.jsonl`) are **deliberately excluded** — they are internal delegation
-steps, not conversations with you. Sub-agent traces (`subagents/*.jsonl`, `agent-*.jsonl`) are excluded by design — on the author's machine that filters out hundreds of files while keeping every real conversation.
+Sub-agent traces (`subagents/*.jsonl`, `agent-*.jsonl`) are **deliberately excluded** — they are
+internal delegation steps, not conversations with you. On the author's machine that filters out
+hundreds of files while keeping every real conversation.
 
 Facts verified against real data: Codex groups multiple files per thread by `session_meta.session_id`
 (resumed threads write a new rollout file), Claude Code is one file per session, and compaction
@@ -231,6 +255,8 @@ then add it to `LIST` in `src/registry.mjs`. Nothing else changes.
   it from the file itself, so this only affects sessions whose header lacks `cwd`.
 - Not a session *browser*. If you want a UI and full-text search over transcripts, something like
   SpecStory already does that; this tool is the compressed handoff layer.
+- Prompts are read verbatim. Anything you typed into a previous tool — including secrets — will be
+  reproduced in the new context. Keep keys out of prompts.
 
 ## License
 

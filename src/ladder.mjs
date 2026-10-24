@@ -106,7 +106,17 @@ export function buildLevels(s) {
               clip(finalOf(last) || "（该轮没有任何文本输出）", 4200)
         }`
       : "（这个会话里没有解析到对话内容）";
-    levels.push({ level: 1, title: settled ? "最新一条结论" : "最新进展（未收尾）", body });
+
+    // 未收尾时给一条退路：直接附上最近一条有结论的轮次，免得为了看一眼上一轮再调一次 level=2
+    let fallback = "";
+    if (last && !settled) {
+      const prev = [...turns].reverse().find((t) => t.i !== last.i && t.finals.length);
+      if (prev) {
+        const tail = clip(finalOf(prev), 600);
+        fallback = `\n\n── 退路：最近一条结论在第 ${prev.i} 轮（约 +${tok(tail)} token）──\n${tail}`;
+      }
+    }
+    levels.push({ level: 1, title: settled ? "最新一条结论" : "最新进展（未收尾）", body: body + fallback });
   }
 
   // L2 最近 3 轮
@@ -129,15 +139,15 @@ export function buildLevels(s) {
       return `${mark}${String(t.i).padStart(2, " ")}. ${oneLine(t.user, 110)}`;
     });
     // 一个会话可能被压缩多次（claude 实测单会话最多 11 次），只取最近两条
-    const comps = s.compaction.slice(-2);
+    const comps = (s.compaction || []).slice(-2);
     const comp = comps.length
       ? "\n\n" +
         comps
           .map(
             (c, i) =>
               `[压缩摘要 ${i + 1}/${comps.length}${
-                s.compaction.length > comps.length
-                  ? `（会话共被压缩 ${s.compaction.length} 次，此处只取最近 ${comps.length} 次）`
+                (s.compaction || []).length > comps.length
+                  ? `（会话共被压缩 ${(s.compaction || []).length} 次，此处只取最近 ${comps.length} 次）`
                   : ""
               }]\n` + clip(c, 1600)
           )

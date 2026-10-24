@@ -163,7 +163,9 @@ export function actList(o) {
         const t = `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
         const mb = (s.files.reduce((a, f) => a + f.size, 0) / 1e6).toFixed(1);
         const proj = (s.cwd || "?").split("/").pop();
-        return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(12)} ${proj.padEnd(22)} ${String(s.id).slice(0, 18)}  ${mb}MB`;
+        // 多段（续跑）必须在第一层就看得见：这决定"手读会不会漏"
+        const segs = s.files.length > 1 ? ` · ${s.files.length} 段` : "";
+        return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(12)} ${proj.padEnd(22)} ${String(s.id).slice(0, 18)}  ${mb}MB${segs}`;
       })
       .join("\n")
   );

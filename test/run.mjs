@@ -9,6 +9,7 @@ import { spawnSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { buildLevels } from "../src/ladder.mjs";
 
 const SB = new URL("../bin/pickup.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
@@ -263,6 +264,28 @@ check("scope=project 严格不回退", () => {
   noCrash(r);
   has(r.out, "不回退");
   return "ok";
+});
+
+check("list 里多段会话带段标记", () => {
+  const r = run(["list", "--limit", "20"]);
+  noCrash(r);
+  const lines = r.out.trim().split("\n").filter((l) => l.includes("MB"));
+  const withSegs = lines.filter((l) => /· \d+ 段/.test(l));
+  if (!withSegs.length) return "本机无多段会话，跳过";
+  return `${withSegs.length}/${lines.length} 行带段标记`;
+});
+
+check("level=1 未收尾时给出上一轮结论", () => {
+  const t = (i, user, finals, narration = []) => ({ i, user, userTs: "", finals, narration, tools: [], files: [] });
+  const s = {
+    agent: "codex", id: "x", cwd: "/tmp", mtimeMs: Date.now(),
+    files: [{ file: "a", mtimeMs: 1, size: 1 }], compaction: [],
+    turns: [t(1, "做A", ["A 完成"]), t(2, "做B", ["B 完成"]), t(3, "做C", [], ["还在做 C"])],
+  };
+  const l1 = buildLevels(s)[0];
+  if (!l1.title.includes("未收尾")) throw new Error(`标题异常: ${l1.title}`);
+  if (!l1.body.includes("退路：最近一条结论在第 2 轮")) throw new Error("没有给出退路");
+  return "退路指向第 2 轮";
 });
 
 check("未知工具被拒绝，不静默降级", () => {

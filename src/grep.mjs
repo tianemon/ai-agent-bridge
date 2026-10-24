@@ -65,6 +65,12 @@ function harvest(rawLine, lower) {
 export async function grepSessions({ query, agent = "auto", project = "", since = 0, limit = 8 }) {
   const lower = String(query).toLowerCase();
   const hits = [];
+  /* 同一段文本在一条 rollout 里常出现两次（event_msg 的规范流 + metadata/response_item 的转义副本），
+   * 不归一化就会把一处命中报成两处、白白吃掉 limit。归一化只用于判重，不改展示内容：
+   * 先整体删掉 \n \r \t \" \\ 这类两字转义，再只留字母数字与汉字——否则字面 \n 会残留一个字母 n，
+   * 两版永远判不成同一处。 */
+  const seen = new Set();
+  const normOf = (s) => s.replace(/\\[nrt"\\]/g, "").replace(/[^\p{L}\p{N}]/gu, "");
 
   for (const s of recentSessions({ agent, project, since, limit: 8 })) {
     for (const f of s.files) {
@@ -75,7 +81,11 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
         if (text) {
           const i = text.toLowerCase().indexOf(lower);
           const snip = text.slice(Math.max(0, i - LEAD), Math.max(0, i - LEAD) + SNIPPET).replace(/\s+/g, " ").trim();
-          if (snip) {
+          /* key 以命中词为中心取对称窗口：副本之间的差异都在命中点之前（多一层转义的 \n），
+           * 用整段 snip 判重会因窗口起点不同而失效。 */
+          const key = normOf(text.slice(Math.max(0, i - 60), i + lower.length + 60));
+          if (snip && key && !seen.has(key)) {
+            seen.add(key);
             hits.push(
               `[${AGENT_LABEL[s.agent]} · ${String(s.id).slice(0, 8)} · ${(s.cwd || "").split("/").pop()}]\n  …${snip}…`
             );

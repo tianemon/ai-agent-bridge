@@ -14,6 +14,18 @@ export { VERSION };
 /** 我们实际实现的协议版本；客户端要别的就回这个，不谎称支持 */
 const PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-30"];
 
+/**
+ * 随 initialize 一起下发的提示（MCP 规范里的 InitializeResult.instructions，规范原文：宿主可以把它
+ * 塞进系统提示，让模型知道这个 server 该怎么用）。工具描述只在模型主动检索工具时可见，
+ * 这段则可能常驻上下文——所以触发词和"别做什么"都放这儿。
+ */
+const INSTRUCTIONS = [
+  "pickup：读【另一个 AI 编码工具】（codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy）的会话。",
+  "用户说「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」时，用 session_latest，",
+  "默认 level=1（约 100 token），不够再逐层加 level；已知轮次用 turns 直接锚定。",
+  "不要用 shell 手工解析 rollout-*.jsonl 或会话 sqlite —— 单条线程可达 50MB 以上，会把上下文撑爆。",
+].join("");
+
 const KNOWN_SCHEMA = {
   type: "object",
   description:
@@ -31,7 +43,7 @@ const TOOLS = [
   {
     name: "session_latest",
     description:
-      "读取【另一个 AI 工具】最近的会话，从最后一条结论开始，信息不够再加 level。默认 level=1 只给最后一条结论（最省上下文）；不够再调 level=2（最近 3 轮问答）→3（全部需求时间线）→4（命令/文件/git）。返回末尾标明更高层的 token 代价。若已知项目/会话/轮次，用 project/session/turns 直接锚定，比让它自己猜更准。用户说“读一下 codex 里最新的会话，接着干”时用这个。",
+      "读【另一个 AI 编码工具】的会话：codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 的最新进展（「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」都用这个）。从最后一条结论开始，信息不够再加 level：默认 level=1 只给最后一条结论（最省上下文）；不够再调 level=2（最近 3 轮问答）→3（全部需求时间线）→4（命令/文件/git）。返回末尾标明更高层的 token 代价。若已知项目/会话/轮次，用 project/session/turns 直接锚定，比让它自己猜更准。",
     inputSchema: {
       type: "object",
       properties: {
@@ -48,7 +60,8 @@ const TOOLS = [
   },
   {
     name: "session_list",
-    description: "列出最近的会话（时间、工具、项目、会话 id、体积）。不确定“最新那个”是哪一次时先用它。",
+    description:
+      "列出 codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 最近的会话（时间、工具、项目、会话 id、体积）。不确定「最新那个」是哪一次、或想看某个项目最近的几轮都是谁在跑时先用它。",
     inputSchema: {
       type: "object",
       properties: {
@@ -63,7 +76,7 @@ const TOOLS = [
   },
   {
     name: "session_read",
-    description: "读指定会话（按 id 前缀），走同样的 level / turns 控制。已知具体是哪次会话时用这个。",
+    description: "读 codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 里指定的那次会话（按 id 前缀），走同样的 level / turns 控制。已知具体是哪次会话（或已从 session_latest 拿到 id）时用这个。",
     inputSchema: {
       type: "object",
       properties: {
@@ -79,7 +92,7 @@ const TOOLS = [
   {
     name: "session_grep",
     description:
-      "在最近的会话里按关键词定点找片段（每处最多 480 字，默认 8 处），思考块不参与匹配。只在前面的 level 都不够、需要确认某个具体细节时用；不要用它把整段对话捞出来。",
+      "在 codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy 最近的会话里按关键词定点找片段（每处最多 480 字，默认 8 处），思考块不参与匹配。只在前面的 level 都不够、需要确认某个具体细节时用；不要用它把整段对话捞出来。",
     inputSchema: {
       type: "object",
       properties: {
@@ -145,6 +158,7 @@ export function serveMcp() {
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
           capabilities: { tools: {} },
           serverInfo: { name: "pickup", version: VERSION },
+          instructions: INSTRUCTIONS,
         },
       });
       return;

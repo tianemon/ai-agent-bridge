@@ -56,7 +56,10 @@ export function registered(host) {
   }
   if (host === "codex") {
     try {
-      return fs.readFileSync(HOSTS.codex.config, "utf8").includes("[mcp_servers.session_bridge]");
+      const text = fs.readFileSync(HOSTS.codex.config, "utf8");
+      // 段名必须跟着 NAME 走：install 写的是 [mcp_servers.pickup]，这里曾硬编码成旧的 session_bridge
+      // → doctor 永远报「Codex 未注册」。旧名由 LEGACY 兜住。
+      return [NAME, ...LEGACY].some((n) => text.includes(`[mcp_servers.${n.replace(/-/g, "_")}]`));
     } catch {
       return false;
     }

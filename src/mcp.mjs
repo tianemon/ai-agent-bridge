@@ -24,6 +24,7 @@ const INSTRUCTIONS = [
   "用户说「读一下 codex 最新会话」「claude 那边做到哪了」「接着上一个工具的活干」时，用 session_latest，",
   "默认 level=1（约 100 token），不够再逐层加 level；已知轮次用 turns 直接锚定。",
   "不要用 shell 手工解析 rollout-*.jsonl 或会话 sqlite —— 单条线程可达 50MB 以上，会把上下文撑爆。",
+  "若 aab doctor 显示 WorkBuddy 未信任，把「连接器 → 自定义连接器 → aab → 信任」原样告诉用户——这一步只能人来点。",
 ].join("");
 
 const KNOWN_SCHEMA = {

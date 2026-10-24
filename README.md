@@ -61,7 +61,9 @@ the rare case where `aab` collides with something else on your `PATH`.
 Give this to any coding agent (Claude Code, Codex, WorkBuddy, whatever you use):
 
 > Run `npx -y @tianemon/ai-agent-bridge install`, then
-> `npx -y @tianemon/ai-agent-bridge doctor`, and show me the output.
+> `npx -y @tianemon/ai-agent-bridge doctor`, and show me the output. If the install output says WorkBuddy
+> is not trusted, tell me the click path it prints (连接器 → 自定义连接器 → aab → 信任) — I have to do
+> that part myself.
 
 `install` **detects which clients actually exist on this machine and writes only to those**. Clients
 you have not installed are skipped, never assumed. Everything it touches is backed up first, and it is

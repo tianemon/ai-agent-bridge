@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
-import { HOSTS, detectHosts, registered, NAME } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, NAME } from "./hosts.mjs";
 import { resolveNode } from "./install.mjs";
 
 const existsDir = (p) => {
@@ -96,11 +96,24 @@ export function doctor() {
     }
     const reg = registered(name);
     const bad = reg && staleEntry(name);
-    lines.push(
-      `  ${host.label.padEnd(12)} ${
-        reg === null ? "? 无法检测" : bad ? "⚠ 已注册但脚本路径不存在" : reg ? "✓ 已注册" : "✗ 未注册"
-      }`
-    );
+    let status;
+    if (reg === null) status = "? 无法检测";
+    else if (bad) status = "⚠ 已注册但脚本路径不存在";
+    else if (!reg) status = "✗ 未注册";
+    else status = "✓ 已注册";
+
+    // WorkBuddy 还有一道人工闸：写进配置之后要点一次信任，MCP 才会真的加载
+    if (reg && name === "workbuddy") {
+      const a = approvalState(name);
+      if (!a.approved) {
+        status += " · ✗ 未信任 → 连接器 → 自定义连接器 → pickup → 信任";
+      } else {
+        const d = a.ts ? new Date(a.ts) : null;
+        const pad = (n) => String(n).padStart(2, "0");
+        status += ` · ✓ 已信任${d ? `（${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}）` : ""}`;
+      }
+    }
+    lines.push(`  ${host.label.padEnd(12)} ${status}`);
   }
   lines.push("");
 
@@ -115,7 +128,12 @@ export function doctor() {
   } else if (!detected.length) {
     lines.push("结论：没检测到任何支持 MCP 的客户端。哪个客户端要用，就在它的设置里加一条 MCP：npx -y @tianemon/agent-session-bridge mcp");
   } else {
-    lines.push("结论：已安装的客户端都已注册。改完配置需新开会话（WorkBuddy 可能还要点一次 Trust）。");
+    const wbUntrusted = detected.includes("workbuddy") && registered("workbuddy") && !approvalState("workbuddy").approved;
+    lines.push(
+      wbUntrusted
+        ? "结论：配置都写好了，但 WorkBuddy 还没点信任 → 连接器 → 自定义连接器 → pickup → 信任（点完新开会话）"
+        : "结论：已安装的客户端都已注册。改完配置需新开会话（WorkBuddy 可能还要点一次 Trust）。"
+    );
   }
   return lines.join("\n");
 }

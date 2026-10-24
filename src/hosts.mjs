@@ -76,6 +76,30 @@ export function registered(host) {
   }
 }
 
+/**
+ * WorkBuddy 的信任状态（连接器 → 自定义连接器 → pickup → 信任）。
+ *
+ * 它记在 ~/.workbuddy/mcp-approvals.json 里，key 形如 `<sha256>::<server>`。
+ * 那个 hash 我们推不出算法，所以不重算，改用时间戳对比：
+ * 信任记录早于配置文件的修改时间 = 配置在信任之后被改过，很可能需要重新信任。
+ */
+export function approvalState(host) {
+  if (host !== "workbuddy") return null;
+  const file = path.join(HOME, ".workbuddy", "mcp-approvals.json");
+  let map;
+  try {
+    map = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return { approved: false, ts: 0 };
+  }
+  const hit = Object.keys(map).find((k) => k.endsWith(`::${NAME}`) || LEGACY.some((n) => k.endsWith(`::${n}`)));
+  if (!hit) return { approved: false, ts: 0 };
+
+  // 只报事实：有没有信任记录、什么时候点的。
+  // 不去比较配置 mtime——宿主自己也会重写 mcp.json，比出来的是假阳性。
+  return { approved: true, ts: Number(map[hit]) || 0 };
+}
+
 export function detectHosts() {
   return Object.entries(HOSTS)
     .filter(([, h]) => h.detect())

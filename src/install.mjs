@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, NAME, LEGACY } from "./hosts.mjs";
 
 const TOML_HEADER = "[mcp_servers.pickup]";
 
@@ -201,10 +201,18 @@ export function install({ targets, dryRun = false } = {}) {
   if (unknown.length) out.push(`  ${unknown.join(", ")}  未知宿主，未处理`);
 
   out.push("");
-  out.push(
-    chosen.length
-      ? "下一步：新开一个会话（或重连连接器）后 MCP 才会加载；WorkBuddy 可能还要在连接器页点一次 Trust。"
-      : "没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y @tianemon/agent-session-bridge mcp`。"
-  );
+  if (!chosen.length) {
+    out.push("没有任何可写的目标。装了哪个客户端就在哪个里手动加一条 MCP：命令 `npx -y @tianemon/agent-session-bridge mcp`。");
+    return out.join("\n");
+  }
+
+  // WorkBuddy 有一道人工闸，宿主自己不会弹提示，只能靠我们把它说清楚
+  const wb = chosen.includes("workbuddy") ? approvalState("workbuddy") : null;
+  if (wb && !wb.approved) {
+    out.push("⚠ WorkBuddy 还需要点一次信任，否则 MCP 不会加载：");
+    out.push("   连接器 → 自定义连接器 → pickup → 信任");
+    out.push("   （这一步没法自动化：信任记录由 WorkBuddy 自己写，工具代写等于绕过安全闸）");
+  }
+  out.push("下一步：新开一个会话（或重连连接器）后 MCP 才会加载。");
   return out.join("\n");
 }

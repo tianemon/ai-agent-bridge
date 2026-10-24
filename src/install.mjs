@@ -18,6 +18,13 @@ const TOML_HEADER = "[mcp_servers.aab]";
 const MANAGED_NODE = /[\\/]\.workbuddy[\\/]|[\\/]_npx[\\/]|[\\/]node_modules[\\/]/;
 const FALLBACK_NODES = ["/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"];
 
+/** 这份代码是从哪儿跑的：决定配置里写什么，也决定"这是开发态还是正式安装" */
+export function runtimeMode(script) {
+  if (/[\\/]_npx[\\/]/.test(script)) return { mode: "npx 缓存", dev: false };
+  if (/[\\/]node_modules[\\/]/.test(script)) return { mode: "npm 全局安装", dev: false };
+  return { mode: "开发目录", dev: true };
+}
+
 export function resolveNode() {
   if (!MANAGED_NODE.test(process.execPath)) return process.execPath;
   for (const c of FALLBACK_NODES) {
@@ -206,6 +213,11 @@ export function install({ targets, dryRun = false } = {}) {
     out.push("⚠ WorkBuddy 还需要点一次信任，否则 MCP 不会加载：");
     out.push("   连接器 → 自定义连接器 → aab → 信任");
     out.push("   （这一步没法自动化：信任记录由 WorkBuddy 自己写，工具代写等于绕过安全闸）");
+  }
+  const rm = runtimeMode(fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname));
+  if (rm.dev) {
+    out.push("提示：当前是【开发目录】运行，配置指向这份源码（改代码即生效）。");
+    out.push("      正式使用请装安装版：npm i -g @tianemon/ai-agent-bridge@latest && aab install");
   }
   out.push("下一步：新开一个会话（或重连连接器）后 MCP 才会加载。");
   return out.join("\n");

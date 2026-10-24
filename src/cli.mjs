@@ -261,5 +261,3 @@ export async function runCli(argv) {
       return `未知命令 ${cmd}\n\n${HELP}`;
   }
 }
-
-export const _internal = { resolveScope, defaultProject, looksLikeProject, isAgent };

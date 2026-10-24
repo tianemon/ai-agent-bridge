@@ -59,6 +59,8 @@ export function recentSessions({ agent = "auto", project = "", limit = 15, since
 /** 按 id 前缀找会话；不指定工具时在所有工具里找 */
 export function findSession({ id, agent = "auto", project = "" }) {
   if (!id) return null;
-  const rows = indexAll(agent, project);
+  // 按最近活动排序：同前缀可能同时命中多家（如都以 01a1 开头），
+  // 不排序就会按注册顺序返回 codex，而不是用户刚在用的那家
+  const rows = indexAll(agent, project).sort((a, b) => b.mtimeMs - a.mtimeMs);
   return rows.find((r) => String(r.id).startsWith(id)) || null;
 }

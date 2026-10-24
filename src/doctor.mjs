@@ -7,7 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
 import { HOSTS, detectHosts, registered, approvalState, NAME } from "./hosts.mjs";
-import { resolveNode } from "./install.mjs";
+import { resolveNode, runtimeMode } from "./install.mjs";
 
 const existsDir = (p) => {
   try {
@@ -64,6 +64,8 @@ export function doctor() {
   const stable = resolveNode();
   if (stable !== process.execPath) lines.push(`          （这是宿主自带的 node；写进配置时会改用 ${stable}）`);
   lines.push(`  script  ${script}`);
+  const rm = runtimeMode(script);
+  lines.push(`  mode    ${rm.mode}${rm.dev ? "（开发态：配置指向源码，正式使用应装 npm 版）" : "（正式安装）"}`);
   const onPath = tryRun("which", ["aab"]);
   lines.push(`  PATH    ${onPath ? `aab → ${onPath}` : "未装到 PATH（npx / 绝对路径调用不受影响）"}`);
   lines.push("");

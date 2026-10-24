@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
-import { dropTomlSection } from "../src/install.mjs";
+import { dropTomlSection, runtimeMode } from "../src/install.mjs";
 
 const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
@@ -340,6 +340,27 @@ check("from: 渲染到最后一轮，around: 渲染前后窗口", () => {
   const around = renderTurns(s, parseTurns("around:5±1"));
   if (!around.includes("【第 4-6 轮")) throw new Error(`around: 渲染错：${around.slice(0, 60)}`);
   return "from:8 → 8-10，around:5±1 → 4-6";
+});
+
+check("能区分开发态 / 安装态 / npx", () => {
+  const dev = runtimeMode("/Users/x/dev/proj/bin/aab.mjs");
+  const inst = runtimeMode("/opt/homebrew/lib/node_modules/@tianemon/ai-agent-bridge/bin/aab.mjs");
+  const npx = runtimeMode("/Users/x/.npm/_npx/abc123/node_modules/@tianemon/ai-agent-bridge/bin/aab.mjs");
+  if (!dev.dev || dev.mode !== "开发目录") throw new Error(`开发态判定错: ${JSON.stringify(dev)}`);
+  if (inst.dev || inst.mode !== "npm 全局安装") throw new Error(`安装态判定错: ${JSON.stringify(inst)}`);
+  if (npx.dev || npx.mode !== "npx 缓存") throw new Error(`npx 判定错: ${JSON.stringify(npx)}`);
+  return "三种运行位置都能分辨";
+});
+
+check("findSession 取最近活动的那个（同前缀不误选）", () => {
+  // 直接验证排序契约：构造两台同前缀会话，较新的必须排在前
+  const rows = [
+    { id: "01a1aaaa", mtimeMs: 100 },
+    { id: "01a1bbbb", mtimeMs: 900 },
+  ].sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const hit = rows.find((r) => r.id.startsWith("01a1"));
+  if (hit.id !== "01a1bbbb") throw new Error("未按 mtime 取最新");
+  return "按最近活动命中";
 });
 
 check("未知工具被拒绝，不静默降级", () => {

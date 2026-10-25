@@ -183,7 +183,7 @@ config. If you would rather not click at all, two options:
 ## Use as CLI
 
 ```bash
-aab list --since 24h                     # what happened lately, one line each
+aab list --since 24h                     # what happened lately: time, tool, project, id, size, title
 aab latest --agent codex --level 1       # newest conclusion only
 aab latest --agent codex --level 3       # still not enough? go one layer deeper
 aab latest --turns 40-41                 # exact range
@@ -196,6 +196,18 @@ aab read --session 53bf411c --level 2
 aab grep "paths-ignore" --agent claude --limit 3
 aab rule                                 # standing rule to paste into CLAUDE.md / AGENTS.md
 ```
+
+**Titles, not just ids.** Each line ends with the session title, because an id alone tells you nothing about
+which conversation it is. Where the title comes from:
+
+| tool | source | if renamed |
+|---|---|---|
+| Codex | `<CODEX_HOME>/session_index.jsonl` (`thread_name`) | the file **appends** a line per rename — the newest `updated_at` wins |
+| WorkBuddy / CodeBuddy | `sessions.title` + `sessions.custom_title` in the app's SQLite DB | `custom_title` (your rename) beats the generated one; the row is always current |
+| Claude Code / EasyMint | no title store — the first real user prompt is used | n/a |
+
+The fallback is clipped to one line, and image-only first messages are skipped. Sessions whose transcript opens
+with an image therefore show no title (the id is still there).
 
 `--known` accepts JSON and is how a model hands over what it already knows (tool, project, session,
 turn range, time window). Explicit flags win over `known` fields. In MCP the same knobs are
@@ -291,6 +303,12 @@ then add it to `LIST` in `src/registry.mjs`. Nothing else changes.
   entries in `src/i18n.mjs`, not a code change.
 - WorkBuddy's trust gate cannot be automated. The approval record is signed by WorkBuddy itself; a tool
   that could write it would be defeating the gate. `aab doctor` reports the state instead.
+
+## Maintaining
+
+Release and installation rules live in [`docs/RELEASING.md`](docs/RELEASING.md) (Chinese), with the
+short version in [`AGENTS.md`](AGENTS.md). The one-line summary: production runs the published package, not
+this checkout.
 
 ## License
 

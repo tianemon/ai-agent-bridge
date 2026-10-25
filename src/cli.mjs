@@ -178,7 +178,9 @@ export function actList(o) {
         const proj = (s.cwd || "?").split("/").pop();
         // 多段（续跑）必须在第一层就看得见：这决定"手读会不会漏"
         const segs = s.files.length > 1 ? tr("list.segs", { n: s.files.length }) : "";
-        return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(12)} ${proj.padEnd(22)} ${String(s.id).slice(0, 18)}  ${mb}MB${segs}`;
+        // 标题放最后一列：ids 认不出是哪个会话，标题才是人真正在看的
+        const title = s.title ? String(s.title).slice(0, 60) : "";
+        return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(11)} ${proj.padEnd(14).slice(0, 14)} ${String(s.id).slice(0, 8)}  ${mb.padStart(5)}MB${segs}${title ? "  " + title : ""}`;
       })
       .join("\n")
   );

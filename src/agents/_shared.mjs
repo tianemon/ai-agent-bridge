@@ -82,9 +82,12 @@ export function newTurn(i) {
  * 头部多行合并取元信息。
  * 各家把 cwd / model 放在不同位置（codex 在 session_meta，claude 在任意一条对话里），
  * 所以扫前若干行直到凑齐，别只看第一行。
+ *
+ * 顺带取 firstUser：没有标题存储的工具（claude / easymint / 老 codex 会话）用它当标题的兜底，
+ * 否则列表里只有一串 id，人根本认不出是哪次会话。只在前 64KB 里找，不额外读文件。
  */
 export function readHeadMeta(file, bytes = MAX_READ_BYTES) {
-  const meta = { cwd: "", model: "", id: "" };
+  const meta = { cwd: "", model: "", id: "", firstUser: "" };
   let fd;
   try {
     fd = fs.openSync(file, "r");
@@ -105,7 +108,21 @@ export function readHeadMeta(file, bytes = MAX_READ_BYTES) {
           p.model || p.thread_settings?.model || o.message?.model || p.message?.model || "";
       }
       if (!meta.id) meta.id = p.session_id || p.id || o.sessionId || "";
-      if (meta.cwd && meta.model && meta.id) break;
+      if (!meta.firstUser) {
+        const item = p.item ?? p;
+        // role 的位置各家不同：claude / easymint 在 o.message.role，wb 在 o.role，codex 是 item.type
+        const role = o.role || item?.role || o.message?.role || p.message?.role || "";
+        if (role === "user" || item?.type === "UserMessage") {
+          const raw =
+            textOf(item.content ?? o.message?.content ?? o.content) ||
+            (typeof o.message?.sections?.body === "string" ? o.message.sections.body : "");
+          const t = userPromptOf(raw);
+          // 纯图片占位（"[Image #1: /path.jpg]"）当标题没有意义，继续往后找真正的文字提问
+          const imageOnly = /^\[Image[^\]]*\](\s*\[Image[^\]]*\])*$/.test(t);
+          if (t && !imageOnly && !looksInjected(t)) meta.firstUser = t;
+        }
+      }
+      if (meta.cwd && meta.model && meta.id && meta.firstUser) break;
     }
   } catch {
     /* 读不到就当没有 */
@@ -113,6 +130,15 @@ export function readHeadMeta(file, bytes = MAX_READ_BYTES) {
     if (fd !== undefined) fs.closeSync(fd);
   }
   return meta;
+}
+
+/** 标题：压成一行、去掉多余空白，超长截断并加省略号 */
+export function clipTitle(t, n = 64) {
+  const s = String(t || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) return "";
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
 export function statSafe(file) {

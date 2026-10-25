@@ -8,7 +8,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { eachLine, textOf, looksInjected, newTurn, readHeadMeta, jsonlByMtime, sameProject } from "./_shared.mjs";
+import {
+  eachLine,
+  textOf,
+  looksInjected,
+  newTurn,
+  readHeadMeta,
+  clipTitle,
+  jsonlByMtime,
+  sameProject,
+} from "./_shared.mjs";
 
 const HOME = os.homedir();
 
@@ -35,10 +44,12 @@ function index(project) {
     for (const rec of files) {
       // 文件名形如 2026-09-23T14-08-39-513Z_01a0ce98-....jsonl
       const stem = path.basename(rec.file, ".jsonl");
+      const own = rec.file === files[0].file ? meta : readHeadMeta(rec.file);
       out.push({
         agent: "easymint",
         model: meta.model,
         cwd,
+        title: clipTitle(own.firstUser),
         id: stem.includes("_") ? stem.slice(stem.indexOf("_") + 1) : stem,
         files: [{ file: rec.file, mtimeMs: rec.stat.mtimeMs, size: rec.stat.size }],
       });

@@ -89,6 +89,8 @@ function header(s) {
       n: s.turns.length,
       cwd: s.cwd || tr("hdr.unknownPath"),
     }),
+    // 标题：多个会话摆在面前时，这一行比 id 有用得多
+    ...(s.title ? [tr("hdr.title", { t: s.title })] : []),
   ].join("\n");
 }
 

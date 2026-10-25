@@ -5,6 +5,7 @@
  * 同一个 thread 续跑会新开一个文件（文件名带 `_<新 id>`），
  * 所以按 session_meta.session_id 归组，组内按 mtime 升序当"段"。
  */
+import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
@@ -14,6 +15,7 @@ import {
   looksInjected,
   newTurn,
   readHeadMeta,
+  clipTitle,
   statSafe,
   walkFiles,
 } from "./_shared.mjs";
@@ -24,7 +26,40 @@ function root() {
   return process.env.CODEX_HOME || path.join(HOME, ".codex");
 }
 
+/**
+ * Codex 的标题在 ${CODEX_HOME:-~/.codex}/session_index.jsonl：{id, thread_name, updated_at}。
+ * **改标题是追加一行**（同一 id 会出现多条，例如 "回应问候" → "回应问候 (2)"），
+ * 所以必须按 updated_at 取最新，不能取第一条。
+ */
+export function latestTitlesFromIndex(text) {
+  const best = new Map();
+  for (const line of String(text || "").split("\n")) {
+    if (!line.startsWith("{")) continue;
+    let o;
+    try {
+      o = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!o.id || !o.thread_name) continue;
+    const ts = Date.parse(o.updated_at || "") || 0;
+    const prev = best.get(o.id);
+    // 没有时间戳的行不比时间，按行序：后出现的更新
+    if (!prev || ts >= prev.ts) best.set(o.id, { name: o.thread_name, ts });
+  }
+  return new Map([...best].map(([id, v]) => [id, v.name]));
+}
+
+function titles() {
+  try {
+    return latestTitlesFromIndex(fs.readFileSync(path.join(root(), "session_index.jsonl"), "utf8"));
+  } catch {
+    return new Map();
+  }
+}
+
 function index() {
+  const names = titles();
   const files = walkFiles(path.join(root(), "sessions"), (n) => n.startsWith("rollout-") && n.endsWith(".jsonl"));
   const groups = new Map();
   for (const file of files) {
@@ -32,9 +67,18 @@ function index() {
     if (!st) continue;
     const meta = readHeadMeta(file, 32768);
     const id = meta.id || path.basename(file);
-    const g = groups.get(id) ?? { agent: "codex", id, cwd: meta.cwd, model: meta.model, files: [] };
+    const g = groups.get(id) ?? {
+      agent: "codex",
+      id,
+      cwd: meta.cwd,
+      model: meta.model,
+      title: "",
+      files: [],
+    };
     if (!g.cwd && meta.cwd) g.cwd = meta.cwd;
     if (!g.model && meta.model) g.model = meta.model;
+    // 显式标题优先；索引里没有（老会话/索引被清）就用首个用户提问兜底
+    if (!g.title) g.title = clipTitle(names.get(id) || meta.firstUser);
     g.files.push({ file, mtimeMs: st.mtimeMs, size: st.size });
     groups.set(id, g);
   }

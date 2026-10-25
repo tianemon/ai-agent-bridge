@@ -165,7 +165,7 @@ WorkBuddy    ✓ 已注册 · ⚠ 信任记录对应的是旧配置，需重新�
 ## 作为 CLI
 
 ```bash
-aab list --since 24h                     # 最近发生了什么，一行一条
+aab list --since 24h                     # 最近发生了什么：时间、工具、项目、id、体积、标题
 aab latest --agent codex --level 1       # 只要最新结论
 aab latest --agent codex --level 3       # 还不够？再要一层
 aab latest --turns 40-41                 # 精确区间
@@ -178,6 +178,16 @@ aab read --session 53bf411c --level 2
 aab grep "paths-ignore" --agent claude --limit 3
 aab rule                                 # 打印可粘进 CLAUDE.md / AGENTS.md 的常驻规则
 ```
+
+**列表带标题，不只给 id。** 只有 id 根本认不出是哪次会话。标题来源：
+
+| 工具 | 来源 | 改标题后 |
+|---|---|---|
+| Codex | `<CODEX_HOME>/session_index.jsonl` 的 `thread_name` | 该文件是**追加**写：改一次标题多一行，取 `updated_at` 最新的那条 |
+| WorkBuddy / CodeBuddy | 应用 SQLite 里 `sessions.title` + `sessions.custom_title` | `custom_title`（你手动改的）优先；表里永远是当前值 |
+| Claude Code / EasyMint | 没有标题存储 —— 用该会话第一个真实提问兜底 | 不适用 |
+
+兜底标题会压成一行、跳过纯图片消息；所以"首条就是图片"的会话没有标题（id 仍然在）。
 
 `--known` 接受 JSON，是模型"把已知信息交进来"的方式（工具、项目、会话、轮次区间、时间窗）。
 显式参数优先于 `known` 里的同名字段。MCP 侧对应的旋钮是 `known` 与 `maxChars`。
@@ -265,6 +275,11 @@ export default {
   测试就会失败；加第三种语言只需往 `src/i18n.mjs` 补条目，不用改代码。
 - WorkBuddy 的信任闸没法自动化。授权记录由 WorkBuddy 自己签发，能代写的工具等于让闸门失效；
   `aab doctor` 负责把状态报出来。
+
+## 维护
+
+发版与安装规则见 [`docs/RELEASING.md`](docs/RELEASING.md)，要点在 [`AGENTS.md`](AGENTS.md)。
+一句话版本：生产跑的是发布出去的包，不是这份源码。
 
 ## 许可
 

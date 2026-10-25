@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createRequire } from "node:module";
 import {
   eachLine,
   textOf,
@@ -22,17 +23,79 @@ import {
   userPromptOf,
   newTurn,
   readHeadMeta,
+  clipTitle,
   jsonlByMtime,
   sameProject,
 } from "./_shared.mjs";
 
 const HOME = os.homedir();
+const requireCJS = createRequire(import.meta.url);
+
+/**
+ * 标题在 sqlite 的 sessions 表：`title` 是自动生成的，`custom_title` 是用户在界面上改的（优先）。
+ * 表里永远是**当前值**（原地更新），所以读一次就是最新标题，不必去重。
+ *
+ * 用 node:sqlite（Node ≥ 22.5 内置）。老 Node 没有这个模块 → 标题退化为首个用户提问，
+ * 不影响其他字段。ExperimentalWarning 会污染宿主日志，导入时临时屏蔽这一条。
+ */
+let sqliteMod;
+function sqlite() {
+  if (sqliteMod !== undefined) return sqliteMod;
+  sqliteMod = null;
+  try {
+    const emit = process.emitWarning;
+    process.emitWarning = (w, ...rest) => {
+      const msg = typeof w === "string" ? w : w?.message || "";
+      if (/SQLite is an experimental feature/i.test(msg)) return;
+      emit.call(process, w, ...rest);
+    };
+    try {
+      sqliteMod = requireCJS("node:sqlite");
+    } finally {
+      process.emitWarning = emit;
+    }
+  } catch {
+    /* 没有 node:sqlite：标题走首个提问兜底 */
+  }
+  return sqliteMod;
+}
+
+/** session_id → 最新标题（custom_title 优先） */
+export function dbTitles(root) {
+  const mod = sqlite();
+  if (!mod?.DatabaseSync) return new Map();
+  for (const name of ["workbuddy.db", "codebuddy.db"]) {
+    const file = path.join(root, name);
+    if (!fs.existsSync(file)) continue;
+    let con;
+    try {
+      con = new mod.DatabaseSync(file, { readOnly: true });
+      const rows = con.prepare("select id, title, custom_title from sessions").all();
+      const map = new Map();
+      for (const r of rows) {
+        const t = String(r.custom_title || r.title || "").trim();
+        if (r.id && t) map.set(String(r.id), t);
+      }
+      return map;
+    } catch {
+      /* 库被锁 / 表结构不同：退化为首个提问 */
+    } finally {
+      try {
+        con?.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return new Map();
+}
 
 function make({ name, label, dir, env }) {
   const root = () => process.env[env] || path.join(HOME, dir);
 
   function index(project) {
     const out = [];
+    const names = dbTitles(root());
     const base = path.join(root(), "projects");
     let dirs;
     try {
@@ -47,11 +110,14 @@ function make({ name, label, dir, env }) {
       const cwd = meta.cwd || (d.name.startsWith("-") || !d.name.startsWith("/") ? "/" + d.name.split("-").slice(1).join("/") : d.name);
       if (project && !sameProject(cwd, project)) continue;
       for (const rec of files) {
+        const id = path.basename(rec.file, ".jsonl");
+        const own = rec.file === files[0].file ? meta : readHeadMeta(rec.file);
         out.push({
           agent: name,
           model: meta.model,
           cwd,
-          id: path.basename(rec.file, ".jsonl"),
+          id,
+          title: clipTitle(names.get(id) || own.firstUser),
           files: [{ file: rec.file, mtimeMs: rec.stat.mtimeMs, size: rec.stat.size }],
         });
       }

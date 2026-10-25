@@ -12,6 +12,7 @@ const DICT = {
     "common.truncated": "…（截断 {n} 字）…",
     "hdr.segs": " · 续跑 {n} 段",
     "hdr.meta": "  会话 {id} · 共 {n} 轮需求 · {cwd}",
+    "hdr.title": "  标题 {t}",
     "hdr.unknownPath": "路径未知",
 
     "l1.title.ok": "最新一条结论",
@@ -143,6 +144,7 @@ const DICT = {
     "common.truncated": "…({n} chars clipped)…",
     "hdr.segs": " · {n} segments",
     "hdr.meta": "  session {id} · {n} turns · {cwd}",
+    "hdr.title": "  title {t}",
     "hdr.unknownPath": "unknown path",
 
     "l1.title.ok": "latest conclusion",

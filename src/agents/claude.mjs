@@ -18,6 +18,7 @@ import {
   looksInjected,
   newTurn,
   readHeadMeta,
+  clipTitle,
   jsonlByMtime,
   sameProject,
 } from "./_shared.mjs";
@@ -44,11 +45,15 @@ function index(project) {
     const cwd = meta.cwd || (d.name.startsWith("-") ? "/" + d.name.split("-").slice(1).join("/") : "");
     if (project && !sameProject(cwd, project)) continue;
     for (const rec of files) {
+      // Claude Code 的 jsonl 里没有标题字段（type:"summary" 在实测版本里也不写），
+      // 用该会话第一个真实提问当标题——否则列表只有一串 uuid，认不出是哪次
+      const own = rec.file === files[0].file ? meta : readHeadMeta(rec.file);
       out.push({
         agent: "claude",
         model: meta.model,
         cwd,
         id: path.basename(rec.file, ".jsonl"),
+        title: clipTitle(own.firstUser),
         files: [{ file: rec.file, mtimeMs: rec.stat.mtimeMs, size: rec.stat.size }],
       });
     }

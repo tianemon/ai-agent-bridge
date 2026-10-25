@@ -13,6 +13,7 @@ import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection, runtimeMode } from "../src/install.mjs";
 import { validateDict } from "../src/i18n.mjs";
+import { latestTitlesFromIndex } from "../src/agents/codex.mjs";
 
 const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
@@ -230,7 +231,8 @@ check("read 不存在的 id 有提示", () => {
 if (agents.includes("codex")) {
   check("read 按前缀锚定", () => {
     const list = run(["list", "--agent", "codex", "--limit", "1", "--scope", "global"]).out;
-    const id = list.match(/([0-9a-f]{8})-[0-9a-f]{4}/)?.[1];
+    // 列表现在只印 8 位前缀（后面让位给标题）：取 "id  12.3MB" 这一段
+    const id = list.match(/([0-9a-f]{8})\s+\d+(?:\.\d+)?MB/)?.[1];
     if (!id) throw new Error("列表里没解析到 id");
     const r = run(["read", "--agent", "codex", "--session", id, "--level", "1"]);
     noCrash(r);
@@ -476,6 +478,44 @@ check("无效入参的警告跟随语言，且不重复说 ignored", () => {
   return "英文警告，语义不重复";
 });
 
+check("会话标题取最新：改过标题的会话用后写的那条", () => {
+  const idx = [
+    JSON.stringify({ id: "s1", thread_name: "旧标题", updated_at: "2026-01-01T00:00:00Z" }),
+    JSON.stringify({ id: "s1", thread_name: "新标题", updated_at: "2026-03-01T00:00:00Z" }),
+    JSON.stringify({ id: "s2", thread_name: "只有一条", updated_at: "2026-01-01T00:00:00Z" }),
+  ].join("\n");
+  const m = latestTitlesFromIndex(idx);
+  if (m.get("s1") !== "新标题") throw new Error(`没取最新：${m.get("s1")}`);
+  if (m.get("s2") !== "只有一条") throw new Error("单条记录丢了");
+  // 没有 updated_at 时按行序：后写的算更新
+  const noTs = [
+    JSON.stringify({ id: "s3", thread_name: "A" }),
+    JSON.stringify({ id: "s3", thread_name: "B" }),
+  ].join("\n");
+  if (latestTitlesFromIndex(noTs).get("s3") !== "B") throw new Error("无时间戳时未按行序取最后一条");
+  return "按 updated_at 取最新，缺时间戳按行序";
+});
+
+check("列表带标题（不是只有 id）", () => {
+  const r = run(["list", "--limit", "30"]);
+  noCrash(r);
+  const lines = r.out.split("\n").filter((l) => /\d+MB/.test(l));
+  if (!lines.length) return "本机无会话，跳过";
+  const withTitle = lines.filter((l) => /MB(?: · \d+ 段)?\s{2}\S/.test(l));
+  if (!withTitle.length) throw new Error("30 条里没有一条带标题");
+  return `${withTitle.length}/${lines.length} 条带标题`;
+});
+
+check("最新会话的表头里带标题行", () => {
+  const r = run(["latest", "--level", "1"]);
+  noCrash(r);
+  if (!/^\s{2}标题 /m.test(r.out) && !/^\s{2}title /m.test(r.out)) {
+    // 无标题的会话（例如首条就是纯图片）允许没有这一行
+    return "当前最新会话无标题，跳过";
+  }
+  return "表头含标题";
+});
+
 check("rule 输出是可直接粘的片段（### 起，元信息不进 stdout）", () => {
   for (const lang of ["zh", "en"]) {
     const r = spawnSync(NODE, [SB, "rule"], {
@@ -498,6 +538,8 @@ check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
   // 唯一允许保留的中文：WorkBuddy 的菜单路径（它的界面就是中文）
   const MENU = "连接器 → 自定义连接器 → aab → 信任";
   const clean = (s) => s.split(MENU).join("");
+  // list 用空 HOME：列表里带的是会话标题（数据，可能是中文），不该被语言闸门判红
+  const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), "aab-gate-"));
   const cmds = [
     ["help"],
     ["version"],
@@ -509,14 +551,21 @@ check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
     ["nosuchcmd"],
     ["latest", "--agent", "cursor"],
     ["grep"],
-    ["list", "--since", "1s"],
+    { args: ["list", "--since", "1s"], home: emptyHome },
   ];
   const bad = [];
-  for (const args of cmds) {
+  for (const entry of cmds) {
+    const args = Array.isArray(entry) ? entry : entry.args;
     const r = spawnSync(NODE, [SB, ...args], {
       encoding: "utf8",
       timeout: 60000,
-      env: { ...process.env, AAB_LANG: "en", LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" },
+      env: {
+        ...process.env,
+        AAB_LANG: "en",
+        LANG: "en_US.UTF-8",
+        LC_ALL: "en_US.UTF-8",
+        ...(entry.home ? { HOME: entry.home } : {}),
+      },
     });
     const out = clean((r.stdout || "") + (r.stderr || ""));
     const hit = out.match(/[\u4e00-\u9fff]+/g);

@@ -102,8 +102,8 @@ const TOOLS = [
   {
     name: "session_list",
     description:
-      `List / 列出 recent sessions across ${TOOL_LIST} (time, tool, project, id, size; multi-segment threads ` +
-      "are marked). 中文：不确定「最新那个」是哪一次、想看最近跑过什么时先用它——" +
+      `List / 列出 recent sessions across ${TOOL_LIST} (time, tool, project, id, size, ` +
+      "**title**, multi-segment threads marked). 中文：不确定「最新那个」是哪一次、想看最近跑过什么时先用它——" +
       "「看看最近的 codex 会话」「我这几天跑了哪些会话」「哪个会话还在跑」。Use it when you are not sure which " +
       "session is the newest, or want to see what has been running in a project recently.",
     inputSchema: {

@@ -4,7 +4,7 @@
  */
 import fs from "node:fs";
 import readline from "node:readline";
-import { AGENT_LABEL, recentSessions } from "./registry.mjs";
+import { AGENT_LABEL, recentSessions, getAgent } from "./registry.mjs";
 import { t as tr } from "./i18n.mjs";
 
 const SNIPPET = 480;
@@ -28,8 +28,8 @@ async function scanFile(file, onLine) {
   }
 }
 
-/** 从一条 jsonl 里挖出所有"非思考"且包含关键词的长字符串 */
-function harvest(rawLine, lower) {
+/** 从一条已解析的 jsonl 对象里挖出所有"非思考"且包含关键词的长字符串 */
+function harvest(root, lower) {
   const out = [];
   const SKIP_KEYS = new Set([
     "thinking",
@@ -54,9 +54,7 @@ function harvest(rawLine, lower) {
       for (const [k, x] of Object.entries(v)) walk(x, k);
     }
   };
-  try {
-    walk(JSON.parse(rawLine), "");
-  } catch {}
+  walk(root, "");
   return out;
 }
 
@@ -74,10 +72,30 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
   const normOf = (s) => s.replace(/\\[nrt"\\]/g, "").replace(/[^\p{L}\p{N}]/gu, "");
 
   for (const s of recentSessions({ agent, project, since, limit: 8 })) {
+    const adapter = getAgent(s.agent) || {};
+    /* 轮次与 parse 同源：扫描时同步数真实用户消息，命中标注"哪一轮"，
+     * 拿到结果就能直接 session_read(turns=N)，不必把整段会话再读一遍。
+     * 第一条用户消息就是第 1 轮（parse 也从 1 起），之后每命中一条才进位。 */
+    let turn = 1;
+    let userSeen = false;
     for (const f of s.files) {
       await scanFile(f.file, (line) => {
-        if (!line.toLowerCase().includes(lower)) return false;
-        const cands = harvest(line, lower);
+        const hasQ = line.toLowerCase().includes(lower);
+        const mayUser = !!adapter.userMarker && line.includes(adapter.userMarker);
+        if (!hasQ && !mayUser) return false;
+        let o;
+        try {
+          o = JSON.parse(line);
+        } catch {
+          return false;
+        }
+        if (mayUser && adapter.userTurnOf(o)) {
+          if (userSeen) turn++;
+          userSeen = true;
+        }
+        if (!hasQ) return false;
+
+        const cands = harvest(o, lower);
         const text = cands.sort((x, y) => y.length - x.length)[0];
         if (text) {
           const i = text.toLowerCase().indexOf(lower);
@@ -88,7 +106,12 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
           if (snip && key && !seen.has(key)) {
             seen.add(key);
             hits.push(
-              `[${AGENT_LABEL[s.agent]} · ${String(s.id).slice(0, 8)} · ${(s.cwd || "").split("/").pop()}]\n  …${snip}…`
+              tr("grep.hit", {
+                label: AGENT_LABEL[s.agent],
+                id: String(s.id).slice(0, 8),
+                i: turn,
+                proj: (s.cwd || "").split("/").pop(),
+              }) + `\n  …${snip}…`
             );
           }
         }
@@ -100,5 +123,6 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
   }
 
   if (!hits.length) return tr("grep.none", { q: query });
-  return `${hits.join("\n\n")}\n\n${tr("grep.footer", { n: hits.length })}`;
+  const capped = hits.length >= limit;
+  return `${hits.join("\n\n")}\n\n${tr(capped ? "grep.footer" : "grep.footer.all", { n: hits.length })}`;
 }

@@ -16,10 +16,11 @@
 （该轮没有收尾结论——会话可能中断、仍在运行，或最后一条只是进展旁白）
 正式界面中已确认：组件/布局切换、Web/移动端切换、配色、效果和放大预览入口都在…
 
-── 信息不够就再要一层（同一会话再调一次，加 level）──
-  level=2  最近 3 轮问答  ≈ +288 token
-  level=3  全部需求时间线  ≈ +962 token
-  level=4  命令 / 文件 / git 状态  ≈ +2836 token
+── 不够就再看一层（同一会话再调一次，换个 level）──
+  level=2  最近 3 轮问答  ≈ 合计 389 token（比当前多 288）
+  level=3  全部需求时间线  ≈ 合计 1063 token（比当前多 962）
+  level=4  命令 / 文件 / git 状态  ≈ 合计 2937 token（比当前多 2836）
+  当前 level=1，全文约 101 token
 ```
 
 上面是 101 token，而这个会话原文约 900 万 token。什么时候停由调用方决定，因为每一层都标明
@@ -47,6 +48,8 @@
 | 3 | 全部需求时间线 + 压缩摘要 | ~1k token |
 | 4 | 改动文件 / 命令 / git 状态 | ~3k token |
 | `turns` | 任意切片（`12-14`、`last:5`、`from:60`、`around:40±2`） | 由你决定 |
+
+每层是一个独立视角，不是叠加：报价就是该视角全文的成本，与当前停在哪一层无关。
 
 最后一轮没有结论时（被打断、还在跑、或最后一条只是进展旁白），第 1 层会明说，而不是拿旁白冒充
 结论 —— 同时附上最近一条真有结论的轮次，带轮号和 token 成本。
@@ -175,9 +178,12 @@ aab latest --turns from:60               # 第 60 轮到最后
 aab latest --turns "around:40±2"         # 第 40 轮前后窗口（默认跨度 3）
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
 aab read --session 53bf411c --level 2
-aab grep "paths-ignore" --agent claude --limit 3
+aab grep "paths-ignore" --agent claude --limit 3   # 命中带会话 id 与轮次号
 aab rule                                 # 打印可粘进 CLAUDE.md / AGENTS.md 的常驻规则
 ```
+
+`grep` 的命中头会写「第 N 轮」，可以直接 `aab read --session <id> --turns N` 取上下文；
+扫到条数上限时会提示用 `--agent` / `--since` 缩小范围（扫描顺序是从最近活动到更早）。
 
 **列表带标题，不只给 id。** 只有 id 根本认不出是哪次会话。标题来源：
 
@@ -257,6 +263,10 @@ export default {
   async parse(files) {
     // → { turns: [{ i, user, userTs, finals: [], narration: [], tools: [], files: [] }], compaction: [] }
   },
+  // grep 标注轮次用：一行（已解析）是否开启新一轮，返回用户原文或 ""
+  userTurnOf(o) {},
+  // 廉价字面预筛：含它才值得 JSON.parse
+  userMarker: '"role":"user"',
 };
 ```
 

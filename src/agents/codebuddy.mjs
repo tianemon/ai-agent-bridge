@@ -90,6 +90,15 @@ export function dbTitles(root) {
   return new Map();
 }
 
+/** 一行（已解析）是否开启新一轮：返回用户原文，否则空串。parse 与 grep 共用。 */
+export function userTurnOf(o) {
+  if (!o || o.type !== "message" || o.role !== "user") return "";
+  const raw = textOf(o.content) || textOf(o.message?.content);
+  if (!raw) return "";
+  const t = userPromptOf(raw);
+  return t && !looksInjected(t) ? t : "";
+}
+
 function make({ name, label, dir, env }) {
   const root = () => process.env[env] || path.join(HOME, dir);
 
@@ -139,18 +148,19 @@ function make({ name, label, dir, env }) {
         const o = JSON.parse(line);
 
         if (o.type === "message") {
-          const raw = textOf(o.content) || textOf(o.message?.content);
-          if (!raw) return;
-          // WB/CB 会把 <system-reminder> 之类的包装拼在用户消息前面，先剥掉
-          const t = o.role === "user" ? userPromptOf(raw) : raw;
-          if (!t) return;
           if (o.role === "user") {
-            if (looksInjected(t)) return;
+            // WB/CB 会把 <system-reminder> 之类的包装拼在用户消息前面，userTurnOf 会剥掉
+            const t = userTurnOf(o);
+            if (!t) return;
             push();
             cur = newTurn(turns.length + 1);
             cur.user = t;
             cur.userTs = o.timestamp || "";
-          } else if (o.role === "assistant") {
+            return;
+          }
+          if (o.role === "assistant") {
+            const t = textOf(o.content) || textOf(o.message?.content);
+            if (!t) return;
             // 这个格式没有 final/commentary 之分，最后一条 assistant 文本即结论
             cur.finals.push(t);
           }
@@ -170,7 +180,7 @@ function make({ name, label, dir, env }) {
     return { turns, compaction };
   }
 
-  return { name, label, root, index, parse };
+  return { name, label, root, index, parse, userTurnOf, userMarker: '"role":"user"' };
 }
 
 export const workbuddy = make({ name: "workbuddy", label: "WorkBuddy", dir: ".workbuddy", env: "WORKBUDDY_HOME" });

@@ -7,6 +7,8 @@
  *   root()  数据根目录（应支持各自的环境变量覆盖）
  *   index(project)  返回 {id, cwd, model, files:[{file, mtimeMs, size}]}
  *   parse(files)    返回 {turns, compaction}
+ *   userTurnOf(o)   一行（已解析）是否开启新一轮：返回用户原文或 ""（parse 与 grep 共用）
+ *   userMarker      廉价的字面预筛；含它才值得 JSON.parse 一次
  */
 import codex from "./agents/codex.mjs";
 import claude from "./agents/claude.mjs";

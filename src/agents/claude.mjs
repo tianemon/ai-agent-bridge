@@ -61,6 +61,16 @@ function index(project) {
   return out;
 }
 
+/** 一行（已解析）是否开启新一轮：返回用户原文，否则空串。parse 与 grep 共用。 */
+export function userTurnOf(o) {
+  if (!o || o.type !== "user" || o.isMeta || o.isCompactSummary || o.toolUseResult) return "";
+  const m = o.message || {};
+  const blocks = Array.isArray(m.content) ? m.content : [];
+  const hasToolResult = blocks.some((b) => b?.type === "tool_result");
+  const t = textOf(m.content);
+  return looksInjected(t) || (hasToolResult && !t) ? "" : t;
+}
+
 async function parse(files) {
   const turns = [];
   const compaction = [];
@@ -91,11 +101,8 @@ async function parse(files) {
           if (s) compaction.push(s.slice(0, 6000));
           return;
         }
-        if (o.toolUseResult) return;
-        const blocks = Array.isArray(m.content) ? m.content : [];
-        const hasToolResult = blocks.some((b) => b?.type === "tool_result");
-        const t = textOf(m.content);
-        if (looksInjected(t) || (hasToolResult && !t)) return;
+        const t = userTurnOf(o);
+        if (!t) return;
         push();
         cur = newTurn(turns.length + 1);
         cur.user = t;
@@ -119,4 +126,4 @@ async function parse(files) {
   return { turns, compaction };
 }
 
-export default { name: "claude", label: "Claude Code", root, index, parse };
+export default { name: "claude", label: "Claude Code", root, index, parse, userTurnOf, userMarker: '"type":"user"' };

@@ -34,6 +34,12 @@ const oneLine = (s, max = 120) =>
     .trim()
     .slice(0, max);
 
+/** 截断必须留痕：路径/命令被切掉尾巴时，加省略号免得被当成完整值 */
+const oneLineCut = (s, max) => {
+  const t = oneLine(s, max + 1);
+  return t.length > max ? t.slice(0, max) + "…" : t;
+};
+
 function fmtTime(ms) {
   if (!ms) return "?";
   const d = new Date(ms);
@@ -175,7 +181,7 @@ export function buildLevels(s) {
       for (const f of t.files) files.set(f, (files.get(f) || 0) + 1);
       for (const x of t.tools) {
         if (x.kind === "cmd") cmds.push(x.target);
-        else tools.set(`${x.name}${x.target ? " · " + oneLine(x.target, 60) : ""}`, 1);
+        else tools.set(`${x.name}${x.target ? " · " + oneLineCut(x.target, 60) : ""}`, 1);
       }
     }
     const top = [...files.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40);
@@ -184,7 +190,7 @@ export function buildLevels(s) {
       ...top.map(([f, n]) => `  ${n}× ${f}`),
       "",
       tr("l4.cmds", { n: cmds.length }),
-      ...cmds.slice(-15).map((c) => "  $ " + oneLine(c, 150)),
+      ...cmds.slice(-15).map((c) => "  $ " + oneLineCut(c, 150)),
       "",
       tr("l4.tools", { n: tools.size }),
       ...[...tools.keys()].slice(0, 20).map((k) => "  - " + k),
@@ -241,15 +247,17 @@ export function render(s, opts = {}) {
   const hit = levels[want - 1];
   const budget = clampInt(opts.maxChars, 200, 20000, want === 1 ? 4200 : 9000);
   const body = clip(hit.body, budget);
+  const curTok = tok(body);
 
   const parts = [header(s), "", tr("lv.head", { n: want, title: hit.title }), body];
 
   if (want < levels.length) {
     parts.push("", tr("next.banner"));
     for (const n of levels.slice(want)) {
-      parts.push(tr("next.cost", { n: n.level, title: n.title, tok: tok(clip(n.body, 9000)) }));
+      const add = tok(clip(n.body, 9000));
+      parts.push(tr("next.cost", { n: n.level, title: n.title, add, total: curTok + add }));
     }
-    parts.push(tr("next.current", { n: want, tok: tok(body) }));
+    parts.push(tr("next.current", { n: want, tok: curTok }));
   } else {
     parts.push("", tr("next.maxed"));
   }

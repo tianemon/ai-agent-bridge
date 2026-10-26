@@ -13,7 +13,10 @@ import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection, runtimeMode } from "../src/install.mjs";
 import { validateDict } from "../src/i18n.mjs";
-import { latestTitlesFromIndex } from "../src/agents/codex.mjs";
+import { latestTitlesFromIndex, userTurnOf as codexUserTurn } from "../src/agents/codex.mjs";
+import { userTurnOf as claudeUserTurn } from "../src/agents/claude.mjs";
+import { userTurnOf as easymintUserTurn } from "../src/agents/easymint.mjs";
+import { userTurnOf as buddyUserTurn } from "../src/agents/codebuddy.mjs";
 
 const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
@@ -260,6 +263,47 @@ check("grep 正则元字符按字面处理", () => {
   const r = run(["grep", "a.*b", "--limit", "1", "--scope", "global"]);
   noCrash(r);
   return "ok";
+});
+
+check("grep 轮次口径：四家 userTurnOf 与 parse 一致", () => {
+  const cx = (item) => ({ type: "event_msg", payload: { type: "item_completed", item } });
+  if (codexUserTurn(cx({ type: "UserMessage", content: [{ type: "text", text: "继续" }] })) !== "继续")
+    throw new Error("codex 用户消息未识别");
+  if (codexUserTurn(cx({ type: "AgentMessage", content: [{ type: "text", text: "好" }] })))
+    throw new Error("codex 结论被误判为用户消息");
+  if (codexUserTurn(cx({ type: "UserMessage", content: [{ type: "text", text: "<system-reminder>x</system-reminder>" }] })))
+    throw new Error("codex 注入消息未过滤");
+
+  if (claudeUserTurn({ type: "user", message: { role: "user", content: "嗨" } }) !== "嗨")
+    throw new Error("claude 用户消息未识别");
+  if (claudeUserTurn({ type: "user", isMeta: true, message: { role: "user", content: "x" } }))
+    throw new Error("claude isMeta 未过滤");
+  if (claudeUserTurn({ type: "user", isCompactSummary: true, message: { role: "user", content: "摘要" } }))
+    throw new Error("claude 压缩摘要被当成需求");
+  if (claudeUserTurn({ type: "user", message: { role: "user", content: [{ type: "tool_result", content: "x" }] } }))
+    throw new Error("claude tool_result 未过滤");
+
+  if (easymintUserTurn({ type: "message", message: { role: "user", content: [{ type: "text", text: "需求" }] } }) !== "需求")
+    throw new Error("easymint 用户消息未识别");
+
+  if (buddyUserTurn({ type: "message", role: "user", content: [{ type: "input_text", text: "问" }] }) !== "问")
+    throw new Error("workbuddy 用户消息未识别");
+  if (buddyUserTurn({ type: "message", role: "user", content: [{ type: "input_text", text: "<system-reminder>x</system-reminder>" }] }))
+    throw new Error("workbuddy 注入消息未过滤");
+
+  return "四家过滤器一致";
+});
+
+check("grep 命中带轮次号，可直接用 read --turns 取上下文", () => {
+  const r = run(["grep", "的", "--limit", "1", "--scope", "global"]);
+  noCrash(r);
+  if (r.out.includes("没命中")) return "本机无会话，跳过";
+  const m = r.out.match(/\[[^\]]*?·\s*([^\s·]+)\s*·\s*第\s*(\d+)\s*轮/);
+  if (!m) throw new Error(`命中头缺轮次号：${r.out.slice(0, 160)}`);
+  const rr = run(["read", "--session", m[1], "--turns", m[2]]);
+  noCrash(rr);
+  has(rr.out, `【第 ${m[2]}-${m[2]} 轮`);
+  return `${m[1]} 第 ${m[2]} 轮`;
 });
 
 /* ── 作用域 ── */

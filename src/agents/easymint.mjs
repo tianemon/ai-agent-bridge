@@ -58,6 +58,15 @@ function index(project) {
   return out;
 }
 
+/** 一行（已解析）是否开启新一轮：返回用户原文，否则空串。parse 与 grep 共用。 */
+export function userTurnOf(o) {
+  if (!o || o.type !== "message") return "";
+  const m = o.message || {};
+  if (m.role !== "user") return "";
+  const t = textOf(m.content) || (typeof m.sections?.body === "string" ? m.sections.body : "");
+  return t && !looksInjected(t) ? t : "";
+}
+
 async function parse(files) {
   const turns = [];
   const compaction = [];
@@ -72,23 +81,24 @@ async function parse(files) {
       const o = JSON.parse(line);
       if (o.type !== "message") return;
       const m = o.message || {};
-      if (m.role !== "user" && m.role !== "assistant") return;
-      const t = textOf(m.content) || (typeof m.sections?.body === "string" ? m.sections.body : "");
-      if (!t) return;
       if (m.role === "user") {
-        if (looksInjected(t)) return;
+        const t = userTurnOf(o);
+        if (!t) return;
         push();
         cur = newTurn(turns.length + 1);
         cur.user = t;
         cur.userTs = o.timestamp || "";
-      } else {
-        // 不区分"旁白/结论"，最后一条 assistant 文本就是结论
-        cur.finals.push(t);
+        return;
       }
+      if (m.role !== "assistant") return;
+      const t = textOf(m.content) || (typeof m.sections?.body === "string" ? m.sections.body : "");
+      if (!t) return;
+      // 不区分"旁白/结论"，最后一条 assistant 文本就是结论
+      cur.finals.push(t);
     });
   }
   push();
   return { turns, compaction };
 }
 
-export default { name: "easymint", label: "EasyMint", root, index, parse };
+export default { name: "easymint", label: "EasyMint", root, index, parse, userTurnOf, userMarker: '"role":"user"' };

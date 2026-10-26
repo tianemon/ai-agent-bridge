@@ -41,8 +41,8 @@ const DICT = {
     "l4.more": "  …还有 {n} 项",
     "l4.commits": "最近提交：",
 
-    "next.banner": "── 信息不够就再要一层（同一会话再调一次，加 level）──",
-    "next.cost": "  level={n}  {title}  ≈ +{tok} token",
+    "next.banner": "── 不够就再看一层（同一会话再调一次，换个 level）──",
+    "next.cost": "  level={n}  {title}  ≈ 合计 {total} token（比当前多 {add}）",
     "next.current": "  当前 level={n}，全文约 {tok} token",
     "next.maxed": "── 已是最大粒度；再要原文请用 session_grep 指定关键词 ──",
 
@@ -130,7 +130,9 @@ const DICT = {
     "list.segs": " · {n} 段",
 
     "grep.none": "没命中「{q}」。",
-    "grep.footer": "（共 {n} 处，已截断；要完整上下文用 session_read + turns 指定轮次）",
+    "grep.hit": "[{label} · {id} · 第 {i} 轮 · {proj}]",
+    "grep.footer": "（已到 {n} 条上限；按最近活动从新到旧扫，可用 agent/since 缩小范围。要看完整上下文，用 session_read + turns=<轮次>）",
+    "grep.footer.all": "（共 {n} 处。要看完整上下文，用 session_read + turns=<轮次>）",
 
     "mcp.failed": "失败：{msg}",
     "list.sep": "、",
@@ -173,9 +175,9 @@ const DICT = {
     "l4.more": "  …and {n} more",
     "l4.commits": "recent commits:",
 
-    "next.banner": "── not enough? ask for one more level (same session, higher level) ──",
-    "next.cost": "  level={n}  {title}  ≈ +{tok} token",
-    "next.current": "  currently level={n}, this output ≈ {tok} token",
+    "next.banner": "── not enough? ask for another view (same session, another level) ──",
+    "next.cost": "  level={n}  {title}  ≈ {total} token total (+{add} over this reply)",
+    "next.current": "  current level={n} ≈ {tok} token",
     "next.maxed": "── finest grain reached; use session_grep with a keyword for raw text ──",
 
     "lv.head": "【level {n} · {title}】",
@@ -263,7 +265,9 @@ const DICT = {
     "list.segs": " · {n} segments",
 
     "grep.none": "no match for \"{q}\".",
-    "grep.footer": "({n} hits, truncated; use session_read + turns for the full context)",
+    "grep.hit": "[{label} · {id} · turn {i} · {proj}]",
+    "grep.footer": "({n} hits — limit reached; newest sessions first, narrow with agent/since. For full context use session_read with turns=<N>)",
+    "grep.footer.all": "({n} hits. For full context use session_read with turns=<N>)",
 
     "mcp.failed": "failed: {msg}",
     "list.sep": ", ",

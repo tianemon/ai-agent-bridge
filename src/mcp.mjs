@@ -34,6 +34,9 @@ const INSTRUCTIONS = [
   '"pick up what the other tool was doing", "continue where codex left off". ',
   "Default level=1 (~120 tokens); raise the level only if it is not enough, and anchor with turns when you ",
   "already know which turns you need. If the user names a tool, pass agent=<that tool>; do not leave it auto. ",
+  "Routing: unknown session -> session_list; known id/prefix -> session_read; one specific detail -> ",
+  "session_grep (hits carry the turn number, then session_read with turns=<N>; newest sessions first, so ",
+  "pass agent/since when the current session eats the limit). ",
   "Do not parse rollout-*.jsonl or session sqlite by hand — one thread can exceed 50 MB and will blow up ",
   "the context. If aab doctor reports WorkBuddy as untrusted, tell the user to click ",
   "连接器 → 自定义连接器 → aab → 信任 (Connectors → Custom connectors → aab → Trust) — only a human can do that.",
@@ -61,10 +64,11 @@ const TOOLS = [
       `「看看 codex 那边做到哪了」「接着 codex 最新会话继续做」「继续上一个会话」「接手之前的活」都走这个。` +
       'Use this for "read the latest codex session", "where did claude get to", "pick up what the other tool ' +
       'was doing", "continue where codex left off". ' +
-      "level=1 (default) returns only the final conclusion, the cheapest possible answer; escalate only if " +
-      "needed: 2 = last 3 turns, 3 = requirement timeline, 4 = commands/files/git state. Every reply ends with " +
-      "the token cost of the next level. If the user names a tool, pass agent=<tool> instead of leaving it auto; " +
-      "if you already know the session/turns, pass them — anchoring beats guessing.",
+      "level=1 (default) returns only the final conclusion, the cheapest possible answer. Levels are different " +
+      "views, not more of the same: 2 = last 3 turns, 3 = requirement timeline, 4 = commands/files/git state; " +
+      "every reply quotes the total token cost of each other view. If the user names a tool, pass " +
+      "agent=<tool> instead of leaving it auto; if you already know the session id/prefix, use session_read; " +
+      "if you know the turns, pass them — anchoring beats guessing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -102,18 +106,24 @@ const TOOLS = [
   {
     name: "session_list",
     description:
-      `List / 列出 recent sessions across ${TOOL_LIST} (time, tool, project, id, size, ` +
-      "**title**, multi-segment threads marked). 中文：不确定「最新那个」是哪一次、想看最近跑过什么时先用它——" +
-      "「看看最近的 codex 会话」「我这几天跑了哪些会话」「哪个会话还在跑」。Use it when you are not sure which " +
-      "session is the newest, or want to see what has been running in a project recently.",
+      `List / 列出 recent sessions across ${TOOL_LIST} (time, tool, project, id, size, title), newest first; ` +
+      "multi-segment threads are marked (the thread continued in a new file after compaction). 中文：不确定" +
+      "「最新那个」是哪一次、想看最近跑过什么时先用它——「看看最近的 codex 会话」「我这几天跑了哪些会话」。" +
+      "Use it when you are not sure which session is the newest, or want to see what has been running " +
+      "in a project recently.",
     inputSchema: {
       type: "object",
       properties: {
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto" },
-        project: { type: "string" },
+        project: { type: "string", description: "absolute project path; empty = cwd (subdirectories resolve to the git root)" },
         limit: { type: "integer", minimum: 1, maximum: 50, default: 15 },
-        since: { type: "string" },
-        scope: { type: "string", enum: ["auto", "project", "global"], default: "auto" },
+        since: { type: "string", description: "only sessions active in this window, e.g. 24h / 7d / 2026-10-23" },
+        scope: {
+          type: "string",
+          enum: ["auto", "project", "global"],
+          default: "auto",
+          description: "project = this project only, error if none; auto = fall back to the whole machine (noted)",
+        },
         known: KNOWN_SCHEMA,
       },
     },
@@ -130,9 +140,13 @@ const TOOLS = [
         session: { type: "string", description: "session id or prefix; empty = the newest one for that tool" },
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto" },
         level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
-        turns: { type: "string", description: "12-14 | 12 | last:5 | from:30 | around:40±2" },
+        turns: {
+          type: "string",
+          description:
+            "exact turns, takes precedence over level: 12-14 range | 12 single | last:5 last five | from:30 from turn 30 | around:40±2 window",
+        },
         maxChars: { type: "integer", minimum: 200, maximum: 20000 },
-        project: { type: "string" },
+        project: { type: "string", description: "absolute project path; empty = cwd (subdirectories resolve to the git root)" },
         known: KNOWN_SCHEMA,
       },
     },
@@ -141,16 +155,23 @@ const TOOLS = [
     name: "session_grep",
     description:
       `Keyword search / 搜索 inside recent sessions of ${TOOL_LIST} — up to 480 characters per hit, 8 hits by ` +
-      "default; reasoning blocks are never searched. 中文：只在前面的 level 都不够、要确认某个具体细节时用" +
+      "default; reasoning blocks are never searched. Each hit carries the session id and turn number, so the " +
+      "follow-up is session_read(turns=<N>). Sessions are scanned newest-first; when the limit is reached, " +
+      "narrow with agent=<tool> or since=<window>. 中文：只在前面的 level 都不够、要确认某个具体细节时用" +
       "（「那个会话里提过 X 吗」「搜一下报错原文」），别用它整篇导出会话。",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string" },
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto" },
-        project: { type: "string" },
-        since: { type: "string" },
-        scope: { type: "string", enum: ["auto", "project", "global"], default: "auto" },
+        project: { type: "string", description: "absolute project path; empty = cwd (subdirectories resolve to the git root)" },
+        since: { type: "string", description: "only sessions active in this window, e.g. 24h / 7d / 2026-10-23" },
+        scope: {
+          type: "string",
+          enum: ["auto", "project", "global"],
+          default: "auto",
+          description: "project = this project only, error if none; auto = fall back to the whole machine (noted)",
+        },
         limit: { type: "integer", minimum: 1, maximum: 20, default: 8 },
         known: KNOWN_SCHEMA,
       },

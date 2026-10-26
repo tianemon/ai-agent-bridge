@@ -27,9 +27,10 @@ const ZH = `### 读其它 AI 工具的会话（aab）
 | 用户说法 | 调用 |
 |---|---|
 | 「查看 codex 会话」「codex 那边做到哪了」 | \`session_latest(agent="codex", level=1)\` |
-| 「接着 codex 最新会话继续做」「继续上一个会话」 | 同上；不够再升 level 2/3/4，已知轮次用 \`turns="last:5"\` |
+| 「接着 codex 最新会话继续做」「继续上一个会话」 | 同上；每层是一个视角，按需换 level，已知轮次用 \`turns="last:5"\` |
 | 不确定是哪一次 | \`session_list\` 先列（可 \`scope="global"\`） |
-| 只差一个细节 | \`session_grep("关键词")\`，别整篇导出 |
+| 已知是哪一次（有 id 前缀） | \`session_read(agent="codex", session="01a176fa")\` |
+| 只差一个细节 | \`session_grep("关键词")\`（命中带轮次号，再用 \`session_read(turns=<轮次>)\` 取上下文），别整篇导出 |
 
 用户点名了工具就传 \`agent\`，别留 \`auto\`。`;
 
@@ -42,9 +43,10 @@ session sqlite by hand** — a single thread can exceed 50MB and will blow up th
 | What the user says | Call |
 |---|---|
 | "read the codex session", "where did codex get to" | \`session_latest(agent="codex", level=1)\` |
-| "continue where codex left off", "pick up the previous session" | same; escalate to 2/3/4 only if needed; \`turns="last:5"\` when known |
+| "continue where codex left off", "pick up the previous session" | same; levels are views — switch level as needed; \`turns="last:5"\` when known |
 | not sure which session | \`session_list\` first (\`scope="global"\` when needed) |
-| one specific detail | \`session_grep("keyword")\`, never dump the whole conversation |
+| know the session id/prefix | \`session_read(agent="codex", session="01a176fa")\` |
+| one specific detail | \`session_grep("keyword")\` (hits carry the turn number; follow with \`session_read(turns=<N>)\`), never dump the whole conversation |
 
 If the user names a tool, pass \`agent\`; do not leave it \`auto\`.`;
 

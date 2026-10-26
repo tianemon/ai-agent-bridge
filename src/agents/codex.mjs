@@ -86,6 +86,17 @@ function index() {
   return [...groups.values()];
 }
 
+/**
+ * 一行（已解析）是否开启新一轮：返回用户原文，否则空串。
+ * parse 与 grep 共用这一套过滤，避免两处口径漂移。
+ */
+export function userTurnOf(o) {
+  const it = o?.payload?.item;
+  if (!it || it.type !== "UserMessage") return "";
+  const t = textOf(it.content);
+  return looksInjected(t) ? "" : t;
+}
+
 /* 只认 event_msg/item_completed：它是去重后的规范流，
  * response_item 是同一批内容的另一条流（用它会把每轮数成两份）。 */
 async function parse(files) {
@@ -113,8 +124,8 @@ async function parse(files) {
       const ts = o.timestamp || "";
 
       if (it.type === "UserMessage") {
-        const t = textOf(it.content);
-        if (looksInjected(t)) return;
+        const t = userTurnOf(o);
+        if (!t) return;
         push();
         cur = newTurn(turns.length + 1);
         cur.user = t;
@@ -159,4 +170,4 @@ async function parse(files) {
   return { turns, compaction };
 }
 
-export default { name: "codex", label: "Codex", root, index, parse };
+export default { name: "codex", label: "Codex", root, index, parse, userTurnOf, userMarker: '"UserMessage"' };

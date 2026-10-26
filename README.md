@@ -20,11 +20,11 @@ turn 67 · asked: 优化一下图标细节，房子图标不标准，播放图�
 - 调整广播、收藏、下一曲和更多图标的轮廓与线宽。
 已实测居中，27 项相关测试及构建通过。
 
-── not enough? ask for one more level (same session, higher level) ──
-  level=2  last 3 turns  ≈ +370 token
-  level=3  full requirement timeline  ≈ +1601 token
-  level=4  commands / files / git state  ≈ +2944 token
-  currently level=1, this output ≈ 120 token
+── not enough? ask for another view (same session, another level) ──
+  level=2  last 3 turns  ≈ 490 token total (+370 over this reply)
+  level=3  full requirement timeline  ≈ 1721 token total (+1601 over this reply)
+  level=4  commands / files / git state  ≈ 3064 token total (+2944 over this reply)
+  current level=1 ≈ 120 token
 ```
 
 120 tokens instead of the session's ~9M. The caller decides when to stop, because every layer reports
@@ -58,6 +58,9 @@ So this tool does three things:
 | 3 | full requirement timeline + compaction summaries | ~1k tok |
 | 4 | files touched / commands / git state | ~3k tok |
 | `turns` | any explicit slice (`12-14`, `last:5`, `from:60`, `around:40±2`) | you decide |
+
+Levels are independent views, not increments: a quoted cost is the cost of that view on its own, regardless
+of which level you are currently on.
 
 When the last turn has no conclusion (interrupted, still running, or only a progress note), level 1
 says so instead of pretending the narration is a conclusion — and appends the most recent turn that
@@ -193,9 +196,13 @@ aab latest --turns from:60               # from turn 60 to the end
 aab latest --turns "around:40±2"         # window around turn 40 (default span 3)
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
 aab read --session 53bf411c --level 2
-aab grep "paths-ignore" --agent claude --limit 3
+aab grep "paths-ignore" --agent claude --limit 3   # hits carry the session id and turn number
 aab rule                                 # standing rule to paste into CLAUDE.md / AGENTS.md
 ```
+
+`grep` hits are labelled with their turn number, so the follow-up is
+`aab read --session <id> --turns N`. When the hit limit is reached it tells you to narrow with
+`--agent` / `--since` (sessions are scanned newest-first).
 
 **Titles, not just ids.** Each line ends with the session title, because an id alone tells you nothing about
 which conversation it is. Where the title comes from:
@@ -283,6 +290,10 @@ export default {
   async parse(files) {
     // → { turns: [{ i, user, userTs, finals: [], narration: [], tools: [], files: [] }], compaction: [] }
   },
+  // used by grep to label hits with a turn number: does this parsed line start a turn?
+  userTurnOf(o) {},
+  // cheap literal prefilter: only lines containing it are worth JSON.parse
+  userMarker: '"role":"user"',
 };
 ```
 

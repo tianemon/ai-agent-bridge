@@ -28,7 +28,7 @@ const DICT = {
     "l2.noUser": "（无用户输入，可能由应用侧自动发起）",
     "l2.noFinal": "（无文本结论）",
 
-    "l3.title": "全部需求时间线",
+    "l3.title": "全部需求与结论（每轮一行）",
     "l3.comp": "[压缩摘要 {i}/{n}{extra}]",
     "l3.comp.extra": "（会话共被压缩 {total} 次，此处只取最近 {n} 次）",
 
@@ -162,7 +162,7 @@ const DICT = {
     "l2.noUser": "(no user input — probably started by the app itself)",
     "l2.noFinal": "(no text conclusion)",
 
-    "l3.title": "full requirement timeline",
+    "l3.title": "full requirement + conclusion timeline",
     "l3.comp": "[compaction summary {i}/{n}{extra}]",
     "l3.comp.extra": " (session was compacted {total} times; showing the last {n})",
 

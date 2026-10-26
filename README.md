@@ -1,131 +1,123 @@
 # ai-agent-bridge
 
-**[English](README.md) · [简体中文](README.zh-CN.md)**
+**[English](README.en.md)**
 
-Read another AI coding tool's session — **newest conclusion first, escalate only as far as you need**.
+读取另一个 AI 编码工具的会话 —— **先给最新结论，不够再逐层往上要**。
 
-Switch from Codex to Claude Code, or from Claude Code to any MCP-capable agent, and pick up where the
-previous tool left off — without stuffing a 30 MB transcript into the context window.
+从 Codex 切到 Claude Code，或者从任何工具切到支持 MCP 的 agent，都能接着上一次干 ——
+而不必把 30 MB 的 transcript 塞进上下文。
 
 ```
-■ Codex · 2026-10-24 11:43 · 4 segments · gpt-6.1-sol
-  session 01a16729-0aed-7012 · 67 turns · /Users/amon/dev/project/EasyMint
+■ Codex · 2026-10-25 10:03 · 续跑 4 段 · gpt-6.1-sol
+  会话 01a16729-0aed-7012 · 共 99 轮需求 · /Users/amon/dev/project/EasyMint
+  标题 解析视频并仿制 UI 风格
 
-【level 1 · latest conclusion】
-turn 67 · asked: 优化一下图标细节，房子图标不标准，播放图标三角形没有居中等等
+【level 1 · 最新进展（未收尾）】
+第 99 轮 · 用户问：重新发布1.4.0
 
-已优化：
-- 重画房屋图标，修正屋顶、墙体和门洞。
-- 修复播放图标在紧凑模式和迷你播放器中的偏移，播放／暂停切换保持居中。
-- 调整广播、收藏、下一曲和更多图标的轮廓与线宽。
-已实测居中，27 项相关测试及构建通过。
+（该轮没有收尾结论——会话可能中断、仍在运行，或最后一条只是进展旁白）
 
-── not enough? ask for another view (same session, another level) ──
-  level=2  last 3 turns  ≈ 490 token total (+370 over this reply)
-  level=3  full requirement timeline  ≈ 1721 token total (+1601 over this reply)
-  level=4  commands / files / git state  ≈ 3064 token total (+2944 over this reply)
-  current level=1 ≈ 120 token
+我会把这些界面修正并入 1.4.0，完成发版检查后替换标签和 Release，触发三平台重新构建。
+
+── 退路：最近一条结论在第 98 轮（约 +93 token）──
+已实现：Mint 头像和名称移到回复上方；去掉回复气泡底色；只有结论保留复制、钉住、重新回答。
+
+── 不够就再看一层（同一会话再调一次，换个 level）──
+  level=2  最近 3 轮问答  ≈ 合计 551 token（比当前多 368）
+  level=3  全部需求与结论（每轮一行）  ≈ 合计 4130 token（比当前多 3947）
+  level=4  命令 / 文件 / git 状态  ≈ 合计 2494 token（比当前多 2311）
+  当前 level=1，全文约 183 token
 ```
 
-120 tokens instead of the session's ~9M. The caller decides when to stop, because every layer reports
-what the next one costs.
+上面是 183 token，这个会话原文 87 MB。什么时候停由调用方决定，因为每一层都标明下一层要花多少。
 
-**Labels follow your locale** (`AAB_LANG` / `LC_ALL` / `LANG`; English by default) — the conversation
-text itself is always reproduced verbatim in whatever language it was written. The sample above is real
-output from an English-locale machine reading a Chinese session.
+注意第 3 层是唯一**随轮数线性增长**的一层（99 轮 ≈ 4.1k token），长会话里它可能比第 4 层还贵 ——
+每层的报价都是真的，按报价选，别按层号猜。
 
-## Why
+## 为什么
 
-Every agent CLI writes its own session format to its own directory. When you switch tools, the only
-shared ground truth is git — which tells you *what* changed, never *why*, what was rejected, or what
-was left unfinished. The obvious fix — dump the transcript into the repo and let the new agent read
-it — fails the moment the transcript is 18 MB.
+每个 agent CLI 都把自己的会话写进自己的目录。切换工具时，唯一的共同真相是 git ——
+它告诉你*改了什么*，但从不告诉你*为什么*、什么被否决了、什么还没做完。
+显而易见的解法是把 transcript 丢进仓库让新 agent 读，可一旦 transcript 有 18 MB 就崩了。
 
-So this tool does three things:
+所以这个工具只做三件事：
 
-1. **Never reads the whole file.** Only user prompts, final assistant messages, tool call targets,
-   and commit state. Thinking blocks, tool outputs, and `base_instructions` are skipped — they are
-   most of the bytes and none of the signal.
-2. **Answers at four levels.** Stop at the first one that's sufficient.
-3. **Lets the caller hand over what it already knows** (`known`), so nothing is guessed.
+1. **从不整份读。** 只取用户提问、最终的 assistant 文本、工具调用目标、git 状态。
+   思考块、工具输出、`base_instructions` 全部跳过 —— 它们占了绝大部分字节，却几乎没有信息。
+2. **四层作答。** 够用的那一层就停。
+3. **让调用方把已知信息交进来**（`known`），不靠猜。
 
-## Ladder
+## 阶梯
 
-| level | content | typical cost |
+| 层 | 内容 | 典型成本 |
 |---|---|---|
-| 1 | last conclusion + that turn's user prompt | ~100 tok |
-| 2 | last 3 turns (question + conclusion) | ~300 tok |
-| 3 | full requirement timeline + compaction summaries | ~1k tok |
-| 4 | files touched / commands / git state | ~3k tok |
-| `turns` | any explicit slice (`12-14`, `last:5`, `from:60`, `around:40±2`) | you decide |
+| 1 | 最后一条结论 + 该轮的提问 | ~180 token |
+| 2 | 最近 3 轮（提问 + 结论） | ~550 token |
+| 3 | 每轮需求 + 结论（就是决策链） | 与轮数成正比（99 轮 ≈ 4.1k token） |
+| 4 | 改动文件 / 命令 / git 状态 | ~2.5k token（只列前 40 个文件、最近 15 条命令） |
+| `turns` | 任意切片（`12-14`、`last:5`、`from:60`、`around:40±2`） | 由你决定 |
 
-Levels are independent views, not increments: a quoted cost is the cost of that view on its own, regardless
-of which level you are currently on.
+每层是一个独立视角，不是叠加：报价就是该视角全文的成本，与当前停在哪一层无关。
 
-When the last turn has no conclusion (interrupted, still running, or only a progress note), level 1
-says so instead of pretending the narration is a conclusion — and appends the most recent turn that
-does have one, with its turn number and token cost.
+最后一轮没有结论时（被打断、还在跑、或最后一条只是进展旁白），第 1 层会明说，而不是拿旁白冒充
+结论 —— 同时附上最近一条真有结论的轮次，带轮号和 token 成本。
 
-## Install — let your agent do it
+## 安装 —— 让 agent 自己装
 
-Published as **`@tianemon/ai-agent-bridge`**; the command it installs is **`aab`** (ai-agent-bridge),
-because that is what an agent types dozens of times a day. `agent-bridge` is installed as an alias for
-the rare case where `aab` collides with something else on your `PATH`.
+发布为 **`@tianemon/ai-agent-bridge`**；它安装的命令是 **`aab`**，因为这是 agent 一天要敲几十次的
+东西。`agent-bridge` 作为别名一起装，用于 `aab` 在 `PATH` 上撞名的罕见情况。
 
-Give this to any coding agent (Claude Code, Codex, WorkBuddy, whatever you use):
+把下面这段交给任意编码 agent（Claude Code、Codex、WorkBuddy 都行）：
 
-> Run `npx -y @tianemon/ai-agent-bridge install`, then
-> `npx -y @tianemon/ai-agent-bridge doctor`, and show me the output. If the install output says WorkBuddy
-> is not trusted, tell me the click path it prints (连接器 → 自定义连接器 → aab → 信任 /
-> Connectors → Custom connectors → aab → Trust) — I have to do that part myself.
+> 运行 `npx -y @tianemon/ai-agent-bridge install`，再运行
+> `npx -y @tianemon/ai-agent-bridge doctor`，把输出给我看。如果安装输出说 WorkBuddy 未信任，
+> 把它打印的点击路径（连接器 → 自定义连接器 → aab → 信任）告诉我 —— 这一步只能我自己点。
 
-`install` **detects which clients actually exist on this machine and writes only to those**. Clients
-you have not installed are skipped, never assumed. Everything it touches is backed up first, and it is
-idempotent — re-running it changes nothing.
+`install` **会先探测本机到底装了哪些客户端，只写存在的那些**。没装的直接跳过，绝不假设。
+动过的配置都先备份，并且是幂等的 —— 重跑不会重复写。
 
 ```bash
-npx -y @tianemon/ai-agent-bridge install --dry-run    # show what it would write
-npx -y @tianemon/ai-agent-bridge doctor               # what can be read, which hosts are wired up
-npx -y @tianemon/ai-agent-bridge prompt               # the agent-facing instruction block
+npx -y @tianemon/ai-agent-bridge install --dry-run    # 只看要写什么，不落盘
+npx -y @tianemon/ai-agent-bridge doctor               # 能读到谁的会话、哪个客户端已挂上
+npx -y @tianemon/ai-agent-bridge prompt               # 打印给 agent 的指令块
 ```
 
-Or keep a permanent command:
+或者装一个常驻命令：
 
 ```bash
 git clone https://github.com/tianemon/ai-agent-bridge ~/dev/ai-agent-bridge
-cd ~/dev/ai-agent-bridge && npm link     # puts `aab` on PATH (symlink: edits take effect immediately)
-npm unlink -g @tianemon/ai-agent-bridge  # uninstall
+cd ~/dev/ai-agent-bridge && npm link     # 把 aab 放到 PATH（符号链接，改代码立即生效）
+npm unlink -g @tianemon/ai-agent-bridge  # 卸载
 ```
 
-No dependencies, no build step, Node ≥ 18. Without any install, everything works as
-`node <path>/bin/aab.mjs <cmd>`.
+零依赖、无构建步骤，Node ≥ 18。完全不安装也能用：`node <路径>/bin/aab.mjs <命令>`。
 
-### Development vs installed copy
+### 开发版与安装版
 
-`aab doctor` prints which copy you are running:
+`aab doctor` 会告诉你当前跑的是哪一份：
 
 ```
-mode    npm 全局安装（正式安装）        # installed copy — what production should use
-mode    开发目录（开发态：…）           # dev checkout — configs point at source, edits apply live
-mode    npx 缓存                       # npx cache — configs point at `npx -y …`
+mode    npm 全局安装（正式安装）        # 安装副本 —— 正式使用应该是这个
+mode    开发目录（开发态：…）           # 开发目录 —— 配置指向源码，改代码即时生效
+mode    npx 缓存                       # npx 缓存 —— 配置指向 `npx -y …`
 ```
 
-`npm link` is for developing; for production install a real copy:
+`npm link` 是给开发用的；正式使用请装真实副本：
 
 ```bash
-npm pack && npm i -g ./tianemon-ai-agent-bridge-<version>.tgz
-aab install      # rewrite host configs to the new path
+npm pack && npm i -g ./tianemon-ai-agent-bridge-<版本>.tgz
+aab install      # 让各家配置指向新路径
 ```
 
-## Use as MCP server
+## 作为 MCP server
 
-The server is `aab mcp` (stdio). `install` writes this for you; the manual form is below if you want
-to do it yourself or your client isn't covered yet.
+服务形态是 `aab mcp`（stdio）。`install` 会替你写好；下面是手写形式，用于你想自己配、或你的客户端
+还没被覆盖的情况。
 
-> Terminal hosts (Claude Code, Codex CLI) can use the short `aab mcp`; GUI hosts (WorkBuddy, Codex
-> Desktop) may spawn children with a minimal `PATH`, so give them an absolute command.
+> 终端宿主（Claude Code、Codex CLI）可以用短命令 `aab mcp`；GUI 宿主（WorkBuddy、Codex Desktop）
+> 启动子进程时 `PATH` 可能被裁剪，请给绝对路径。
 
-**WorkBuddy** — `~/.workbuddy/mcp.json`
+**WorkBuddy** —— `~/.workbuddy/mcp.json`
 
 ```json
 {
@@ -138,7 +130,7 @@ to do it yourself or your client isn't covered yet.
 }
 ```
 
-**Codex** — `~/.codex/config.toml`
+**Codex** —— `~/.codex/config.toml`
 
 ```toml
 [mcp_servers.aab]
@@ -153,19 +145,19 @@ startup_timeout_sec = 20
 claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-bridge/bin/aab.mjs mcp
 ```
 
-Tools exposed: `session_latest`, `session_list`, `session_read`, `session_grep`, `session_agents`.
+暴露的工具：`session_latest`、`session_list`、`session_read`、`session_grep`、`session_agents`。
 
-### WorkBuddy requires one manual click after installing
+### WorkBuddy 装完必须手点一次信任
 
-WorkBuddy does not prompt when a new MCP server appears in its config, and it will not load one until you
-approve it. After `aab install` reaches WorkBuddy you must click once:
+WorkBuddy 在配置里出现新的 MCP server 时不会提示，而且在你确认之前不会加载它。
+`aab install` 写到 WorkBuddy 之后，你需要点一次：
 
 ```
 连接器 → 自定义连接器 → aab → 信任
 Connectors → Custom connectors → aab → Trust
 ```
 
-`aab doctor` tells you the current state, so you never have to guess:
+`aab doctor` 直接告诉你当前状态，不用猜：
 
 ```
 WorkBuddy    ✓ 已注册 · ✓ 已信任（2026-10-24 12:26）
@@ -173,86 +165,78 @@ WorkBuddy    ✓ 已注册 · ✗ 未信任 → 连接器 → 自定义连接器
 WorkBuddy    ✓ 已注册 · ⚠ 信任记录对应的是旧配置，需重新点
 ```
 
-This step cannot be automated, by design: the approval record is WorkBuddy's own security gate —
-"a human confirms this server may run commands on this machine". A tool that writes its own approval
-would be defeating the gate, and would open the same hole for anything else that drops an entry into the
-config. If you would rather not click at all, two options:
+这一步刻意无法自动化：信任记录是 WorkBuddy 自己的安全闸 ——
+"由人确认这个 server 可以在本机执行命令"。工具代写自己的授权，等于闸门失效，
+也会给任何往配置里塞 entry 的程序开后门。如果你完全不想点，有两条路：
 
-- `aab install --agent codex,claude` — skip WorkBuddy entirely
-- Use the CLI channel inside WorkBuddy instead of MCP: one line in the project's `CLAUDE.md` /
-  `AGENTS.md` telling the agent to run `aab latest` when it needs another tool's session
-  (no trust gate, but one shell round-trip per call)
+- `aab install --agent codex,claude` —— 干脆不碰 WorkBuddy
+- 在 WorkBuddy 里走 CLI 通道而不是 MCP：在项目的 `CLAUDE.md` / `AGENTS.md` 写一行，
+  让 agent 需要别家会话时直接跑 `aab latest`（没有信任闸，但每次多一次 shell 往返）
 
-## Use as CLI
+## 作为 CLI
 
 ```bash
-aab list --since 24h                     # what happened lately: time, tool, project, id, size, title
-aab latest --agent codex --level 1       # newest conclusion only
-aab latest --agent codex --level 3       # still not enough? go one layer deeper
-aab latest --turns 40-41                 # exact range
-aab latest --turns 12                    # one turn
-aab latest --turns last:5                # last 5 turns
-aab latest --turns from:60               # from turn 60 to the end
-aab latest --turns "around:40±2"         # window around turn 40 (default span 3)
+aab list --since 24h                     # 最近发生了什么：时间、工具、项目、id、体积、标题
+aab latest --agent codex --level 1       # 只要最新结论
+aab latest --agent codex --level 3       # 还不够？再要一层
+aab latest --turns 40-41                 # 精确区间
+aab latest --turns 12                    # 单轮
+aab latest --turns last:5                # 最近 5 轮
+aab latest --turns from:60               # 第 60 轮到最后
+aab latest --turns "around:40±2"         # 第 40 轮前后窗口（默认跨度 3）
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
 aab read --session 53bf411c --level 2
-aab grep "paths-ignore" --agent claude --limit 3   # hits carry the session id and turn number
-aab rule                                 # standing rule to paste into CLAUDE.md / AGENTS.md
+aab grep "paths-ignore" --agent claude --limit 3   # 命中带会话 id 与轮次号
+aab rule                                 # 打印可粘进 CLAUDE.md / AGENTS.md 的常驻规则
 ```
 
-`grep` hits are labelled with their turn number, so the follow-up is
-`aab read --session <id> --turns N`. When the hit limit is reached it tells you to narrow with
-`--agent` / `--since` (sessions are scanned newest-first).
+`grep` 的命中头会写「第 N 轮」，可以直接 `aab read --session <id> --turns N` 取上下文；
+扫到条数上限时会提示用 `--agent` / `--since` 缩小范围（扫描顺序是从最近活动到更早）。
 
-**Titles, not just ids.** Each line ends with the session title, because an id alone tells you nothing about
-which conversation it is. Where the title comes from:
+**列表带标题，不只给 id。** 只有 id 根本认不出是哪次会话。标题来源：
 
-| tool | source | if renamed |
+| 工具 | 来源 | 改标题后 |
 |---|---|---|
-| Codex | `<CODEX_HOME>/session_index.jsonl` (`thread_name`) | the file **appends** a line per rename — the newest `updated_at` wins |
-| WorkBuddy / CodeBuddy | `sessions.title` + `sessions.custom_title` in the app's SQLite DB | `custom_title` (your rename) beats the generated one; the row is always current |
-| Claude Code / EasyMint | no title store — the first real user prompt is used | n/a |
+| Codex | `<CODEX_HOME>/session_index.jsonl` 的 `thread_name` | 该文件是**追加**写：改一次标题多一行，取 `updated_at` 最新的那条 |
+| WorkBuddy / CodeBuddy | 应用 SQLite 里 `sessions.title` + `sessions.custom_title` | `custom_title`（你手动改的）优先；表里永远是当前值 |
+| Claude Code / EasyMint | 没有标题存储 —— 用该会话第一个真实提问兜底 | 不适用 |
 
-The fallback is clipped to one line, and image-only first messages are skipped. Sessions whose transcript opens
-with an image therefore show no title (the id is still there).
+兜底标题会压成一行、跳过纯图片消息；所以"首条就是图片"的会话没有标题（id 仍然在）。
 
-`--known` accepts JSON and is how a model hands over what it already knows (tool, project, session,
-turn range, time window). Explicit flags win over `known` fields. In MCP the same knobs are
-`known` and `maxChars`.
+`--known` 接受 JSON，是模型"把已知信息交进来"的方式（工具、项目、会话、轮次区间、时间窗）。
+显式参数优先于 `known` 里的同名字段。MCP 侧对应的旋钮是 `known` 与 `maxChars`。
 
-Output language: `AAB_LANG=en|zh` overrides, otherwise it follows `LC_ALL` / `LANG`. Conversation
-content is never translated — only the surrounding labels change.
+输出语言：`AAB_LANG=zh|en` 可强制指定，否则跟随 `LC_ALL` / `LANG`（默认英文）。会话正文永远不翻译，
+只换周围的标签 —— 上面那段样例就是英文环境下读一份中文会话的真实输出。
 
-### Make it deterministic: `aab rule`
+### 想稳定命中：`aab rule`
 
-MCP's `InitializeResult.instructions` is specified as something the host *may* put into the system
-prompt — optional. WorkBuddy does not, in practice: the model sees five bare tool names (deferred, so it
-has to search before it can even read the descriptions). Descriptions raise the odds of a hit; only a file
-the host reads every session makes it certain.
+MCP 的 `InitializeResult.instructions` 规范原文是宿主**可以**把它塞进系统提示——可选的。WorkBuddy 实测
+不塞：模型只看到五个裸工具名（还是 deferred，得先检索才读得到描述）。所以描述只能提高概率，
+**只有宿主每个会话都会读的文件才是确定性的**。
 
 ```bash
-aab rule        # prints a 10-line section; stdout is paste-ready, the "which file" hint goes to stderr
+aab rule        # 打印十行左右的片段；stdout 可直接粘，选哪个文件的提示走 stderr
 ```
 
-Paste it into the project's `CLAUDE.md` (WorkBuddy, Claude Code) or `AGENTS.md` (Codex). It lists the
-phrasings people actually use — "查看 codex 会话", "接着继续做", "read the codex session" — against the call
-to make, and the one rule that matters most: do not hand-parse `rollout-*.jsonl`.
+粘进项目根的 `CLAUDE.md`（WorkBuddy / Claude Code）或 `AGENTS.md`（Codex）。里面按"用户真实说法"列了
+说法 → 调用的对照（「查看 codex 会话」「接着继续做」），以及最要紧的一条：别手解 `rollout-*.jsonl`。
 
-This is opt-in on purpose: it edits *your* repo's rule file, and which file applies depends on the host.
+这一步是**可选**的：它改的是你自己仓库的规则文件，而该写哪个文件取决于宿主。
 
-## Scope
+## 作用域
 
-Default is **this project**: the working directory, resolved to its git root. Use `--scope`:
+默认是**本项目**：工作目录，归到它的 git 根。用 `--scope` 调整：
 
-| scope | behaviour |
+| scope | 行为 |
 |---|---|
-| `auto` (default) | this project first; if nothing found, fall back to machine-wide **and say so** in the output |
-| `project` | this project only — no fallback, reports not-found instead |
-| `global` | machine-wide |
+| `auto`（默认） | 本项目优先；找不到就退到全机，**并在输出里注明** |
+| `project` | 只在本项目 —— 不回退，找不到就报错 |
+| `global` | 全机 |
 
-## Supported tools
+## 支持的工具
 
-| tool | session location | env override |
+| 工具 | 会话位置 | 环境变量覆盖 |
 |---|---|---|
 | Codex | `<home>/.codex/sessions/**/rollout-*.jsonl` | `CODEX_HOME` |
 | Claude Code | `<home>/.claude/projects/<slug>/<uuid>.jsonl` | `CLAUDE_CONFIG_DIR` |
@@ -260,24 +244,21 @@ Default is **this project**: the working directory, resolved to its git root. Us
 | CodeBuddy | `<home>/.codebuddy/projects/<slug>/<uuid>.jsonl` | `CODEBUDDY_HOME` |
 | EasyMint | `<home>/.easymint/agent/sessions/--<slug>--/<ts>_<id>.jsonl` | `EASYMINT_HOME` |
 
-WorkBuddy and CodeBuddy share one writer (their transcripts even carry a `__codebuddyLocal` field), so a
-single adapter covers both: `type:"message"` with `input_text` / `output_text` blocks, plus
-`function_call` / `function_call_result` / `reasoning` / `file-history-snapshot` lines that we skip.
-WorkBuddy wraps the user's prompt in a `<system-reminder>` envelope — the real text is inside
-`<user_query>`, which is what we read.
+WorkBuddy 与 CodeBuddy 共用同一套写入器（transcript 里甚至带 `__codebuddyLocal` 字段），
+所以一个适配器覆盖两家：`type:"message"` 配 `input_text` / `output_text` 块，
+另有 `function_call` / `function_call_result` / `reasoning` / `file-history-snapshot` 行被跳过。
+WorkBuddy 会把用户提问包在 `<system-reminder>` 信封里 —— 真正的文本在 `<user_query>` 内，我们读的是它。
 
-Sub-agent traces (`subagents/*.jsonl`, `agent-*.jsonl`) are **deliberately excluded** — they are
-internal delegation steps, not conversations with you. On the author's machine that filters out
-hundreds of files while keeping every real conversation.
+子代理 trace（`subagents/*.jsonl`、`agent-*.jsonl`）**刻意排除** —— 它们是模型内部的委派过程，
+不是与你的对话。在作者机器上这过滤掉了数百个文件，却保留了每一个真实会话。
 
-Facts verified against real data: Codex groups multiple files per thread by `session_meta.session_id`
-(resumed threads write a new rollout file), Claude Code is one file per session, and compaction
-summaries that masquerade as user messages (`isCompactSummary`) are separated out so they never
-pollute the requirement timeline.
+以下事实都对真实数据验证过：Codex 按 `session_meta.session_id` 把多文件归成一个 thread
+（续跑会新写一个 rollout 文件）；Claude Code 一文件一会话；伪装成用户消息的压缩摘要
+（`isCompactSummary`）被单独隔离，不会污染需求时间线。
 
-## Add another tool
+## 再加一个工具
 
-Create `src/agents/<name>.mjs`:
+新建 `src/agents/<名字>.mjs`：
 
 ```js
 export default {
@@ -290,37 +271,34 @@ export default {
   async parse(files) {
     // → { turns: [{ i, user, userTs, finals: [], narration: [], tools: [], files: [] }], compaction: [] }
   },
-  // used by grep to label hits with a turn number: does this parsed line start a turn?
+  // grep 标注轮次用：一行（已解析）是否开启新一轮，返回用户原文或 ""
   userTurnOf(o) {},
-  // cheap literal prefilter: only lines containing it are worth JSON.parse
+  // 廉价字面预筛：含它才值得 JSON.parse
   userMarker: '"role":"user"',
 };
 ```
 
-then add it to `LIST` in `src/registry.mjs`. Nothing else changes.
+然后在 `src/registry.mjs` 的 `LIST` 里登记一行，别处不用改。
 
-## Limits
+## 限制
 
-- **Read-only.** Writes nothing to any tool's data directory. The only external processes are
-  `git log`, `git status`, `git rev-parse` — fixed arguments, no shell.
-- Windows is untested. Directory-slug fallbacks assume POSIX paths; the primary `cwd` judgement reads
-  it from the file itself, so this only affects sessions whose header lacks `cwd`.
-- Not a session *browser*. If you want a UI and full-text search over transcripts, something like
-  SpecStory already does that; this tool is the compressed handoff layer.
-- Prompts are read verbatim. Anything you typed into a previous tool — including secrets — will be
-  reproduced in the new context. Keep keys out of prompts.
-- English and Chinese only. Every label the tool prints is localized (`AAB_LANG`), and the test suite
-  fails if any command leaks Chinese in English mode — but a third language would need new dictionary
-  entries in `src/i18n.mjs`, not a code change.
-- WorkBuddy's trust gate cannot be automated. The approval record is signed by WorkBuddy itself; a tool
-  that could write it would be defeating the gate. `aab doctor` reports the state instead.
+- **只读。** 不写任何工具的数据目录。唯一的外部进程是 `git log` / `git status` / `git rev-parse`，
+  固定参数、不走 shell。
+- Windows 未实测。目录 slug 的兜底逻辑假设 POSIX 路径；主判据是从文件里读 `cwd`，
+  所以只影响头部缺 `cwd` 的会话。
+- 不是会话**浏览器**。想要 UI 和全文检索，SpecStory 之类已经在做；这个工具做的是压缩后的交接层。
+- 提问是逐字读取的。你在上一个工具里打过的任何内容 —— 包括密钥 —— 都会原样出现在新上下文里。
+  别把密钥写进 prompt。
+- 只做了中英两种语言。工具打印的每个标签都走字典（`AAB_LANG`），英文模式下只要有一条命令漏出中文，
+  测试就会失败；加第三种语言只需往 `src/i18n.mjs` 补条目，不用改代码。
+- WorkBuddy 的信任闸没法自动化。授权记录由 WorkBuddy 自己签发，能代写的工具等于让闸门失效；
+  `aab doctor` 负责把状态报出来。
 
-## Maintaining
+## 维护
 
-Release and installation rules live in [`docs/RELEASING.md`](docs/RELEASING.md) (Chinese), with the
-short version in [`AGENTS.md`](AGENTS.md). The one-line summary: production runs the published package, not
-this checkout.
+发版与安装规则见 [`docs/RELEASING.md`](docs/RELEASING.md)，要点在 [`AGENTS.md`](AGENTS.md)。
+一句话版本：生产跑的是发布出去的包，不是这份源码。
 
-## License
+## 许可
 
 MIT

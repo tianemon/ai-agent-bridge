@@ -213,7 +213,7 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
 用法：
   aab latest   从最新一条结论开始（默认 level=1，不够再加）
       --agent codex|claude|workbuddy|codebuddy|easymint|auto   默认 auto（所有来源里最新的）
-      --level 1..4                         1=结论 2=最近3轮 3=需求时间线 4=命令/文件/git
+      --level 1..4                         1=结论 2=最近3轮 3=需求+结论 4=命令/文件/git
       --session <id 前缀>                   直接锚定某次会话
       --turns 12-14 | 12 | last:5 | from:30 | around:40±2   直接要某几轮（跳过阶梯）
       --since 24h | 2026-10-23              只要这段时间内有活动的
@@ -247,7 +247,7 @@ const HELP_EN = `aab — pick up where another AI coding tool left off, with onl
 Usage:
   aab latest   start from the newest conclusion (level=1 by default; raise it if needed)
       --agent codex|claude|workbuddy|codebuddy|easymint|auto   default: auto (newest across all)
-      --level 1..4                      1=conclusion 2=last 3 turns 3=timeline 4=commands/files/git
+      --level 1..4                      1=conclusion 2=last 3 turns 3=requirement+conclusion 4=commands/files/git
       --session <id prefix>             anchor to one specific session
       --turns 12-14 | 12 | last:5 | from:30 | around:40±2   exact slice (skips the ladder)
       --since 24h | 2026-10-23          only sessions active in this window

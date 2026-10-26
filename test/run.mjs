@@ -615,6 +615,26 @@ check("最新会话的表头里带标题行", () => {
   return "表头含标题";
 });
 
+check("level 3 是需求 + 结论（决策链），不是只有需求", () => {
+  const r = run(["read", "--level", "3"]);
+  noCrash(r);
+  const rows = r.out.split("\n").filter((l) => /^[▸ ]?\s*\d+\.\s/.test(l));
+  if (!rows.length) return "本机无会话，跳过";
+  const paired = rows.filter((l) => l.includes("  → "));
+  if (!paired.length) throw new Error("没有任何一轮带结论 —— 退化成纯需求时间线了");
+  return `${paired.length}/${rows.length} 轮带结论`;
+});
+
+check("level 4 的改动面不含依赖目录", () => {
+  const r = run(["read", "--level", "4"]);
+  noCrash(r);
+  const fileRows = r.out.split("\n").filter((l) => /^\s+\d+×\s/.test(l));
+  if (!fileRows.length) return "本机无文件改动，跳过";
+  const bad = fileRows.filter((l) => /node_modules\/|(^|\/)dist\//.test(l));
+  if (bad.length) throw new Error(`改动面混进依赖目录：${bad[0].trim()}`);
+  return `${fileRows.length} 条文件行，无依赖目录`;
+});
+
 check("rule 输出是可直接粘的片段（### 起，元信息不进 stdout）", () => {
   for (const lang of ["zh", "en"]) {
     const r = spawnSync(NODE, [SB, "rule"], {

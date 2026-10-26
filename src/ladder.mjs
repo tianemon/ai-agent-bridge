@@ -34,6 +34,27 @@ const oneLine = (s, max = 120) =>
     .trim()
     .slice(0, max);
 
+/**
+ * 把一条结论压成"定成了什么"的一句话。
+ * 表格行、粗体星号、链接地址、列表符号都不是结论，先剥掉再取第一句 ——
+ * 否则时间线后半截全是 `| 方案 | 说明 |` 这种无效内容。
+ */
+const decisionLine = (s, max = 44) => {
+  const text = String(s || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s*\|.*\|\s*$/gm, "")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, "")
+    .replace(/\[([^\]]*)\]\(([^)]*)\)/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  const one = (text.match(/^.{0,}?[。！？.!?](?=\s|$|[\u4e00-\u9fff])/) || [text.split(/[。！？\n]/)[0]])[0];
+  const arr = [...one];
+  return arr.length > max ? arr.slice(0, max).join("").trim() + "…" : one;
+};
+
 /** 截断必须留痕：路径/命令被切掉尾巴时，加省略号免得被当成完整值 */
 const oneLineCut = (s, max) => {
   const t = oneLine(s, max + 1);
@@ -148,11 +169,14 @@ export function buildLevels(s) {
     levels.push({ level: 2, title: tr("l2.title", { n: pick.length }), body });
   }
 
-  // L3 需求时间线
+  // L3 需求 + 结论（决策链）
   {
+    // 每轮「要什么 → 定成了什么」：只有需求没有结论，读到的是纠结而不是决策。
+    // 结论缺失时什么都不加（不写"（无结论）"，那是噪声）。
     const lines = turns.map((t) => {
       const mark = t.i === last?.i ? "▸" : " ";
-      return `${mark}${String(t.i).padStart(2, " ")}. ${oneLine(t.user, 110)}`;
+      const a = decisionLine(finalOf(t), 44);
+      return `${mark}${String(t.i).padStart(2, " ")}. ${oneLine(t.user, 100)}${a ? "  → " + a : ""}`;
     });
     // 一个会话可能被压缩多次（claude 实测单会话最多 11 次），只取最近两条
     const all = s.compaction || [];
@@ -177,8 +201,13 @@ export function buildLevels(s) {
     const files = new Map();
     const cmds = [];
     const tools = new Map();
+    const noise = /(^|\/)(node_modules|dist|build|out|\.git|target|vendor)\//;
+    const inRepo = (f) => !f.startsWith("/") || (s.cwd && f.startsWith(s.cwd + "/"));
     for (const t of turns) {
-      for (const f of t.files) files.set(f, (files.get(f) || 0) + 1);
+      for (const f of t.files) {
+        if (noise.test(f) || !inRepo(f)) continue;
+        files.set(f, (files.get(f) || 0) + 1);
+      }
       for (const x of t.tools) {
         if (x.kind === "cmd") cmds.push(x.target);
         else tools.set(`${x.name}${x.target ? " · " + oneLineCut(x.target, 60) : ""}`, 1);

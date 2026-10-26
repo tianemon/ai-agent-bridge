@@ -65,7 +65,7 @@ const TOOLS = [
       'Use this for "read the latest codex session", "where did claude get to", "pick up what the other tool ' +
       'was doing", "continue where codex left off". ' +
       "level=1 (default) returns only the final conclusion, the cheapest possible answer. Levels are different " +
-      "views, not more of the same: 2 = last 3 turns, 3 = requirement timeline, 4 = commands/files/git state; " +
+      "views, not more of the same: 2 = last 3 turns, 3 = requirement + what each turn settled on, 4 = commands/files/git state; " +
       "every reply quotes the total token cost of each other view. If the user names a tool, pass " +
       "agent=<tool> instead of leaving it auto; if you already know the session id/prefix, use session_read; " +
       "if you know the turns, pass them — anchoring beats guessing.",

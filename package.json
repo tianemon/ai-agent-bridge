@@ -1,6 +1,6 @@
 {
   "name": "@tianemon/ai-agent-bridge",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Read another AI coding tool's session — newest conclusion first, escalate only as far as you need.",
   "type": "module",
   "bin": {
@@ -14,7 +14,7 @@
     "index.mjs",
     "README.md",
     "LICENSE",
-    "README.zh-CN.md"
+    "README.en.md"
   ],
   "engines": {
     "node": ">=18"

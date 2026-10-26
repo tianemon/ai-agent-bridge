@@ -66,7 +66,7 @@ npm i -g /tmp/tianemon-ai-agent-bridge-<ver>.tgz
 - [ ] `node test/run.mjs` 全绿（当前 78 条；**新增命令必须同时加进 `AAB_LANG=en` 那条闸门**）
 - [ ] 源码扫一遍中文字面量：只剩 `zh` 版 help/prompt、`mcp` 里的中文触发词、WorkBuddy 中文菜单路径
 - [ ] 中英字典键一一对齐（测试已覆盖 `validateDict()`）
-- [ ] `README.md` 与 `README.zh-CN.md` 都写上了新命令/新行为（两版要同步）
+- [ ] `README.md`（中文，默认）与 `README.en.md` 都写上了新命令/新行为（两版要同步）
 - [ ] `aab help` 里有新命令，且 `--agent` 列表写全（`codex|claude|workbuddy|codebuddy|easymint|auto`）
 - [ ] `git status` 干净；没有 `*.tgz` 之类打包产物被跟踪
 - [ ] 结论里有"发布后才可能发现"的项，就在**这一步**查，不要留到发布后

@@ -8,4 +8,4 @@
 1. `AGENTS.md` —— 四条铁律（生产用安装版、先验证再发布、五处对齐、文案只进 i18n）
 2. `docs/RELEASING.md` —— 发版与安装的完整 SOP，**发版前必须通读**
 
-产品说明看 `README.md` / `README.zh-CN.md`。
+产品说明看 `README.md`（中文，默认）/ `README.en.md`。

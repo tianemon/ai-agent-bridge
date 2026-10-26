@@ -32,7 +32,11 @@ const ZH = `### 读其它 AI 工具的会话（aab）
 | 已知是哪一次（有 id 前缀） | \`session_read(agent="codex", session="01a176fa")\` |
 | 只差一个细节 | \`session_grep("关键词")\`（命中带轮次号，再用 \`session_read(turns=<轮次>)\` 取上下文），别整篇导出 |
 
-用户点名了工具就传 \`agent\`，别留 \`auto\`。`;
+用户点名了工具就传 \`agent\`，别留 \`auto\`。
+
+**额度用完了就别 resume 它**：\`codex resume\` / \`claude --resume\` 只对各自工具有效，欠费时那一步是白跑；
+直接读它最后的状态，自己接着干。
+**文件改动一律以 \`git status\` 为准**：转录里的「已完成 / 已修复」是上个 agent 的自述，level 4 的文件清单也是二手信息。`;
 
 const EN = `### Reading another AI tool's session (aab)
 
@@ -48,7 +52,12 @@ session sqlite by hand** — a single thread can exceed 50MB and will blow up th
 | know the session id/prefix | \`session_read(agent="codex", session="01a176fa")\` |
 | one specific detail | \`session_grep("keyword")\` (hits carry the turn number; follow with \`session_read(turns=<N>)\`), never dump the whole conversation |
 
-If the user names a tool, pass \`agent\`; do not leave it \`auto\`.`;
+If the user names a tool, pass \`agent\`; do not leave it \`auto\`.
+
+**If that tool's quota is gone, do not try to resume it** — \`codex resume\` / \`claude --resume\` only work for their
+own tool, and with the quota exhausted that round trip is wasted. Read its last state and carry on yourself.
+**Trust \`git status\` over the transcript**: "done" or "fixed" in the log is the previous agent's own claim, and the
+level 4 file list is second-hand too.`;
 
 export function rule() {
   return isZh() ? ZH : EN;

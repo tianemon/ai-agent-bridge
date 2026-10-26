@@ -16,7 +16,7 @@ import { validateDict } from "../src/i18n.mjs";
 import { latestTitlesFromIndex, userTurnOf as codexUserTurn } from "../src/agents/codex.mjs";
 import { userTurnOf as claudeUserTurn } from "../src/agents/claude.mjs";
 import { userTurnOf as easymintUserTurn } from "../src/agents/easymint.mjs";
-import { userTurnOf as buddyUserTurn } from "../src/agents/codebuddy.mjs";
+import { workbuddy, userTurnOf as buddyUserTurn } from "../src/agents/codebuddy.mjs";
 
 const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
 const NODE = process.execPath;
@@ -293,6 +293,32 @@ check("grep 轮次口径：四家 userTurnOf 与 parse 一致", () => {
 
   return "四家过滤器一致";
 });
+
+{
+  // WorkBuddy 的 function_call.arguments 是 JSON 字符串（实测 175/175），不是对象；
+  // 不解析就会把整串当目标，level 4 既没有命令也提不出文件。
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aab-wb-"));
+  const file = path.join(dir, "wb.jsonl");
+  fs.writeFileSync(
+    file,
+    [
+      JSON.stringify({ type: "message", role: "user", content: [{ type: "input_text", text: "看看 README.md" }] }),
+      JSON.stringify({ type: "function_call", name: "Bash", arguments: JSON.stringify({ command: "cat /tmp/x/README.md" }) }),
+      JSON.stringify({ type: "function_call", name: "Edit", arguments: JSON.stringify({ file_path: "/repo/src/a.ts" }) }),
+    ].join("\n")
+  );
+  const parsed = await workbuddy.parse([{ file }]);
+  check("WorkBuddy function_call 的 JSON 字符串参数能解析出命令与文件", () => {
+    const [bash, edit] = parsed.turns[0].tools;
+    if (bash.kind !== "cmd" || bash.target !== "cat /tmp/x/README.md") {
+      throw new Error(`Bash 解析错：${JSON.stringify(bash)}`);
+    }
+    if (!parsed.turns[0].files.includes("/tmp/x/README.md")) throw new Error("命令里的文件未提取");
+    if (edit.kind !== "tool" || edit.target !== "/repo/src/a.ts") throw new Error(`Edit 解析错：${JSON.stringify(edit)}`);
+    if (!parsed.turns[0].files.includes("/repo/src/a.ts")) throw new Error("file_path 未提取");
+    return "命令 / 文件均正确";
+  });
+}
 
 check("grep 命中带轮次号，可直接用 read --turns 取上下文", () => {
   const r = run(["grep", "的", "--limit", "1", "--scope", "global"]);

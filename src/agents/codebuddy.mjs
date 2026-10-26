@@ -24,6 +24,7 @@ import {
   newTurn,
   readHeadMeta,
   clipTitle,
+  filesIn,
   jsonlByMtime,
   sameProject,
 } from "./_shared.mjs";
@@ -168,10 +169,31 @@ function make({ name, label, dir, env }) {
         }
 
         if (o.type === "function_call") {
-          const a = o.arguments ?? o.input ?? {};
+          // WB/CB 把参数写成 JSON 字符串（实测 175/175）；不解析就只能把整串当目标，
+          // level 4 会既数不出命令、也提不出文件。
+          let a = o.arguments ?? o.input ?? {};
+          if (typeof a === "string") {
+            try {
+              a = JSON.parse(a);
+            } catch {
+              a = {};
+            }
+          }
+          if (!a || typeof a !== "object") a = {};
+          const cmd = typeof a.command === "string" ? a.command : typeof a.cmd === "string" ? a.cmd : "";
           const target =
-            (typeof a === "string" ? a : a.path || a.file_path || a.cmd || a.command || a.query || "") || "";
-          cur.tools.push({ kind: "tool", name: o.name || o.tool || "tool", target: String(target).slice(0, 300) });
+            (typeof a.path === "string" && a.path) ||
+            (typeof a.file_path === "string" && a.file_path) ||
+            (typeof a.pattern === "string" && a.pattern) ||
+            (typeof a.query === "string" && a.query) ||
+            (typeof a.url === "string" && a.url) ||
+            cmd;
+          cur.tools.push({
+            kind: cmd ? "cmd" : "tool",
+            name: o.name || o.tool || "tool",
+            target: String(target).slice(0, 300),
+          });
+          for (const f of filesIn(JSON.stringify(a).slice(0, 4000))) cur.files.push(f);
           return;
         }
       });

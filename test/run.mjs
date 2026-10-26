@@ -13,6 +13,7 @@ import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection, runtimeMode } from "../src/install.mjs";
 import { validateDict } from "../src/i18n.mjs";
+import { grepSessions } from "../src/grep.mjs";
 import { latestTitlesFromIndex, userTurnOf as codexUserTurn } from "../src/agents/codex.mjs";
 import { userTurnOf as claudeUserTurn } from "../src/agents/claude.mjs";
 import { userTurnOf as easymintUserTurn } from "../src/agents/easymint.mjs";
@@ -317,6 +318,34 @@ check("grep 轮次口径：四家 userTurnOf 与 parse 一致", () => {
     if (edit.kind !== "tool" || edit.target !== "/repo/src/a.ts") throw new Error(`Edit 解析错：${JSON.stringify(edit)}`);
     if (!parsed.turns[0].files.includes("/repo/src/a.ts")) throw new Error("file_path 未提取");
     return "命令 / 文件均正确";
+  });
+}
+
+{
+  // WorkBuddy 把思考写成整行 type:"reasoning" + rawContent[].type:"reasoning_text"，
+  // 只跳过 thinking 会让思考块进命中结果——描述里承诺过只搜对话内容。
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aab-grep-wb-"));
+  fs.mkdirSync(path.join(root, "projects", "slug"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "projects", "slug", "s1.jsonl"),
+    [
+      JSON.stringify({ type: "message", role: "user", content: [{ type: "input_text", text: "userneed 这是一条足够长的用户需求文字" }] }),
+      JSON.stringify({ type: "reasoning", rawContent: [{ type: "reasoning_text", text: "secretreason 这是一段足够长的思考内容" }] }),
+      JSON.stringify({ type: "message", role: "assistant", content: [{ type: "output_text", text: "answer" }] }),
+    ].join("\n")
+  );
+  const old = process.env.WORKBUDDY_HOME;
+  process.env.WORKBUDDY_HOME = root;
+  const none = await grepSessions({ query: "secretreason", agent: "workbuddy", project: "", since: 0, limit: 5 });
+  const hit = await grepSessions({ query: "userneed", agent: "workbuddy", project: "", since: 0, limit: 5 });
+  if (old === undefined) delete process.env.WORKBUDDY_HOME;
+  else process.env.WORKBUDDY_HOME = old;
+
+  check("grep 不返回 reasoning 块，正常对话仍可命中", () => {
+    // 进程内调用走默认语言（en），与 CLI 子进程的 AAB_LANG=zh 不同
+    if (!/没命中|no match/i.test(none)) throw new Error(`思考块进了结果：${none.slice(0, 160)}`);
+    if (!hit.includes("userneed") || !/(第 1 轮|turn 1)/.test(hit)) throw new Error(`正常对话未命中：${hit.slice(0, 160)}`);
+    return "思考块已隔离，对话命中带轮次";
   });
 }
 

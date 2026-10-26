@@ -34,6 +34,7 @@ function harvest(root, lower) {
   const SKIP_KEYS = new Set([
     "thinking",
     "thinkingSignature",
+    "reasoning",
     "raw_content",
     "summary_text",
     "base_instructions",
@@ -50,7 +51,8 @@ function harvest(root, lower) {
       return;
     }
     if (typeof v === "object") {
-      if (v.type === "thinking" || v.type === "tool_result") return;
+      // WorkBuddy 整行 type:"reasoning"，块类型 reasoning_text；只认 thinking 会把它漏进命中
+      if (v.type === "thinking" || v.type === "reasoning" || v.type === "reasoning_text" || v.type === "tool_result") return;
       for (const [k, x] of Object.entries(v)) walk(x, k);
     }
   };

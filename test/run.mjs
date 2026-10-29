@@ -760,6 +760,139 @@ check("install --agent 未知宿主给提示", () => {
   return "ok";
 });
 
+/* ── EasyMint（隔离 HOME；EM 的路径规则见 hosts.mjs 的 easymintConfigPath） ── */
+const emHome = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), `aab-em-${prefix}-`));
+const emInstall = (home, args, env = {}) =>
+  spawnSync(NODE, [SB, ...args], {
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, HOME: home, EASYMINT_HOME: "", AAB_LANG: "zh", ...env },
+  });
+const readJson = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
+
+check("install easymint 写进 EM 的生效路径，保留其它 server 且幂等", () => {
+  const home = emHome("keep");
+  const dir = path.join(home, ".easymint", "agent");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "mcp.json");
+  fs.writeFileSync(file, JSON.stringify({ mcpServers: { playwright: { type: "stdio", command: "npx", args: ["x"] } } }, null, 2));
+
+  const first = emInstall(home, ["install", "easymint"]);
+  if (first.status !== 0) throw new Error(first.stderr.slice(0, 160));
+  const cfg = readJson(file);
+  const entry = cfg.mcpServers.aab;
+  if (entry?.type !== "stdio" || !entry.command || !Array.isArray(entry.args)) throw new Error(`条目形状不对：${JSON.stringify(entry)}`);
+  if (!entry.args.join(" ").endsWith("bin/aab.mjs mcp")) throw new Error(`args 不对：${entry.args}`);
+  if (!entry.description) throw new Error("缺 description（EM 靠它决定要不要找外部能力）");
+  if (!cfg.mcpServers.playwright) throw new Error("覆盖时删掉了别的 server");
+  const baks = () => fs.readdirSync(dir).filter((n) => n.includes(".bak-"));
+  if (!baks().length) throw new Error("改动前没有备份");
+
+  const snapshot = fs.readFileSync(file, "utf8");
+  const second = emInstall(home, ["install", "easymint"]);
+  if (second.status !== 0) throw new Error(second.stderr.slice(0, 160));
+  if (fs.readFileSync(file, "utf8") !== snapshot) throw new Error("重复安装不是幂等");
+  if (baks().length !== 1) throw new Error("幂等时又写了一次备份");
+  return "写入 + 保留 + 备份 + 幂等";
+});
+
+check("install easymint 跟随 EM 的旧路径，不遮蔽旧配置里的 server", () => {
+  const home = emHome("legacy");
+  const root = path.join(home, ".easymint");
+  fs.mkdirSync(root, { recursive: true });
+  const legacy = path.join(root, "mcp.json");
+  fs.writeFileSync(legacy, JSON.stringify({ mcpServers: { old: { type: "stdio", command: "x" } } }, null, 2));
+  const r = emInstall(home, ["install", "easymint"]);
+  if (r.status !== 0) throw new Error(r.stderr.slice(0, 160));
+  if (fs.existsSync(path.join(root, "agent", "mcp.json"))) throw new Error("另建了新文件，旧 server 会被遮蔽");
+  const cfg = readJson(legacy);
+  if (!cfg.mcpServers.old || !cfg.mcpServers.aab) throw new Error(JSON.stringify(cfg.mcpServers));
+
+  // 新路径已存在（哪怕空的）就归新路径——与 EM 的读逻辑一致
+  const home2 = emHome("emptynew");
+  const root2 = path.join(home2, ".easymint");
+  fs.mkdirSync(path.join(root2, "agent"), { recursive: true });
+  fs.writeFileSync(path.join(root2, "agent", "mcp.json"), '{"mcpServers":{}}\n');
+  fs.writeFileSync(path.join(root2, "mcp.json"), JSON.stringify({ mcpServers: { old: { type: "stdio", command: "x" } } }, null, 2));
+  const r2 = emInstall(home2, ["install", "easymint"]);
+  if (r2.status !== 0) throw new Error(r2.stderr.slice(0, 160));
+  if (!readJson(path.join(root2, "agent", "mcp.json")).mcpServers.aab) throw new Error("空的新配置没被当作生效文件");
+  if (readJson(path.join(root2, "mcp.json")).mcpServers.aab) throw new Error("写错了路径");
+  return "旧路径兜底 + 空新配置优先";
+});
+
+check("install easymint 拒绝覆盖损坏配置，dry-run 零写入", () => {
+  const broken = emHome("broken");
+  const dir = path.join(broken, ".easymint", "agent");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "mcp.json");
+  fs.writeFileSync(file, "{ 坏掉的 json");
+  const r = emInstall(broken, ["install", "easymint"]);
+  if (fs.readFileSync(file, "utf8") !== "{ 坏掉的 json") throw new Error("损坏文件被改了");
+  has(r.stdout, "不是合法的 MCP 配置");
+
+  const dry = emHome("dry");
+  fs.mkdirSync(path.join(dry, ".easymint"), { recursive: true });
+  const rr = emInstall(dry, ["install", "easymint", "--dry-run"]);
+  if (rr.status !== 0) throw new Error(rr.stderr.slice(0, 160));
+  const left = [];
+  const walk = (d) => {
+    for (const n of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, n.name);
+      if (n.isDirectory()) walk(p);
+      else left.push(p);
+    }
+  };
+  walk(dry);
+  if (left.length) throw new Error(`dry-run 写了：${left.join(", ")}`);
+  return "损坏拒写 + dry-run 全空";
+});
+
+check("install 目标解析：位置参数等价 --agent，未知目标与二选一都不写", () => {
+  const a = emHome("pos");
+  const b = emHome("flag");
+  for (const h of [a, b]) fs.mkdirSync(path.join(h, ".easymint"), { recursive: true });
+  const ra = emInstall(a, ["install", "easymint"]);
+  const rb = emInstall(b, ["install", "--agent", "easymint"]);
+  if (ra.status !== 0 || rb.status !== 0) throw new Error(`${ra.stderr} ${rb.stderr}`);
+  const read = (h) => fs.readFileSync(path.join(h, ".easymint", "agent", "mcp.json"), "utf8");
+  if (read(a) !== read(b)) throw new Error("两种写法结果不同");
+
+  // 未知目标：一个字节都不能落到其它宿主（曾经会退化成"装全部已探测宿主"）
+  const c = emHome("unknown");
+  fs.mkdirSync(path.join(c, ".easymint"), { recursive: true });
+  fs.mkdirSync(path.join(c, ".codex"), { recursive: true });
+  const toml = path.join(c, ".codex", "config.toml");
+  fs.writeFileSync(toml, "# untouched\n");
+  const rc = emInstall(c, ["install", "cursor"]);
+  has(rc.stdout, "未知宿主");
+  if (fs.readFileSync(toml, "utf8") !== "# untouched\n") throw new Error("未知目标时误写了别的宿主");
+
+  const d = emHome("ambig");
+  fs.mkdirSync(path.join(d, ".easymint"), { recursive: true });
+  const rd = emInstall(d, ["install", "easymint", "--agent", "codex"]);
+  has(rd.stdout, "只能二选一");
+  if (fs.existsSync(path.join(d, ".easymint", "agent", "mcp.json"))) throw new Error("冲突时仍然写了配置");
+  return "等价 / 未知不误装 / 冲突拒绝";
+});
+
+check("doctor 列出 EasyMint 宿主并识别注册状态", () => {
+  const home = emHome("doc");
+  fs.mkdirSync(path.join(home, ".easymint"), { recursive: true });
+  emInstall(home, ["install", "easymint"]);
+  const r = spawnSync(NODE, [SB, "doctor"], {
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, HOME: home, EASYMINT_HOME: "", AAB_LANG: "zh" },
+  });
+  const lines = (r.stdout || "").split("\n");
+  const start = lines.findIndex((l) => l.includes("宿主"));
+  const line = lines.slice(start).find((l) => l.includes("EasyMint"));
+  if (!line) throw new Error("宿主段没有 EasyMint");
+  if (!line.includes("已注册")) throw new Error(`状态不对：${line.trim()}`);
+  return line.trim();
+});
+
 /* ── MCP ── */
 function mcpRoundtrip(payloads, waitMs = 3500, cwd = os.homedir()) {
   return new Promise((resolve) => {

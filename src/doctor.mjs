@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
-import { HOSTS, detectHosts, registered, approvalState, trustStale, NAME } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, trustStale, readEasymintConfig, NAME } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 import { resolveNode, runtimeMode } from "./install.mjs";
 
@@ -40,6 +40,10 @@ function staleEntry(host) {
     if (host === "workbuddy") {
       const cfg = JSON.parse(fs.readFileSync(HOSTS.workbuddy.config, "utf8"));
       const p = scriptOf(cfg?.mcpServers?.[NAME]);
+      return p ? !fs.existsSync(p) : false;
+    }
+    if (host === "easymint") {
+      const p = scriptOf(readEasymintConfig(HOSTS.easymint.config)?.mcpServers?.[NAME]);
       return p ? !fs.existsSync(p) : false;
     }
     if (host === "codex") {

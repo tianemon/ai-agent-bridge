@@ -226,8 +226,9 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
   aab read     [--session <id>] [--turns 12-14] [--level N]
   aab grep     "关键词" [--agent ...] [--since ...] [--limit 8]
   aab mcp      stdio MCP server
-  aab install  [--agent workbuddy,codex,claude] [--dry-run]
-                 只给本机确实装了的客户端注册 MCP；不给 --agent 就自动探测
+  aab install  [easymint|workbuddy|codex|claude] [--agent <同名逗号列表>] [--dry-run]
+                 只给指定的 / 本机确实装了的客户端注册 MCP；都不给就自动探测
+                 aab install easymint 与 aab install --agent easymint 等价，二者不能同时给
   aab doctor                                                 诊断：能读到谁、哪个客户端还没挂上
   aab agents                                                 列出能读哪些工具的会话
   aab prompt                                                 打印一段可直接粘给任意 agent 的安装指令
@@ -260,8 +261,9 @@ Usage:
   aab read     [--session <id>] [--turns 12-14] [--level N]
   aab grep     "keyword" [--agent ...] [--since ...] [--limit 8]
   aab mcp      stdio MCP server
-  aab install  [--agent workbuddy,codex,claude] [--dry-run]
-                 register MCP only with clients actually installed here; no --agent = auto-detect
+  aab install  [easymint|workbuddy|codex|claude] [--agent <same list, comma separated>] [--dry-run]
+                 register MCP only with the named / actually installed clients; neither given = auto-detect
+                 aab install <target> equals aab install --agent <target>; passing both is rejected
   aab doctor                                                 diagnose: what is readable, which host is missing
   aab agents                                                 list which tools can be read
   aab prompt                                                 print an install instruction an agent can follow
@@ -295,12 +297,17 @@ export async function runCli(argv) {
     case "agents":
       return AGENTS.map((a) => `${a}  ${AGENT_LABEL[a]}`).join("\n");
     case "install": {
-      const raw = String(o.agent && o.agent !== "true" ? o.agent : "")
+      // 位置参数（aab install easymint）与 --agent 等价；两者同时给就报歧义，
+      // 不能静默合并——那会让人以为只装了一家，实际写了两家
+      const positional = o._.map((x) => x.trim()).filter((x) => x && x !== "true");
+      const flagged = String(o.agent && o.agent !== "true" ? o.agent : "")
         .split(",")
         .map((x) => x.trim())
         .filter(Boolean);
+      if (positional.length && flagged.length) return tr("install.ambiguous");
+      const targets = [...positional, ...flagged];
       return install({
-        targets: raw.length ? raw : undefined,
+        targets: targets.length ? targets : undefined,
         dryRun: o["dry-run"] === "true" || o["dry-run"] === true,
       });
     }

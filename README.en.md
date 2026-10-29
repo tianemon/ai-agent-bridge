@@ -66,11 +66,12 @@ explicitly and appends the most recent turn that has one, with its turn number a
 ## Install
 
 `install` writes configuration only for clients actually present on the machine, backs up before writing, and
-is idempotent.
+is idempotent. Supported hosts: WorkBuddy, Codex, Claude Code, EasyMint.
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install --dry-run              # print what would be written
 npx -y @tianemon/ai-agent-bridge install --agent codex,claude   # limit to specific clients
+npx -y @tianemon/ai-agent-bridge install easymint               # EasyMint only (same as --agent easymint)
 aab prompt                                                      # print instructions an agent can follow
 ```
 
@@ -119,6 +120,22 @@ startup_timeout_sec = 20
 
 ```bash
 claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-bridge/bin/aab.mjs mcp
+```
+
+**EasyMint** — `<EASYMINT_HOME>/agent/mcp.json` (defaults to `~/.easymint/agent/mcp.json`; if the legacy
+`~/.easymint/mcp.json` still holds entries, that file is updated instead so nothing gets shadowed)
+
+```json
+{
+  "mcpServers": {
+    "aab": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/you/dev/ai-agent-bridge/bin/aab.mjs", "mcp"],
+      "description": "Read another AI coding tool's session"
+    }
+  }
+}
 ```
 
 Tools: `session_latest`, `session_list`, `session_read`, `session_grep`, `session_agents`.

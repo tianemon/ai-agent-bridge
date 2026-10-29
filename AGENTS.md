@@ -45,7 +45,7 @@ aab install --dry-run             # 看会往哪几家写配置，不落盘
 
 ## 不要做的事
 
-- 不要手改三家宿主的 MCP 配置来"修"路径——用 `aab install`，它会备份、会清旧名、是幂等的
+- 不要手改宿主自己的 MCP 配置来"修"路径——用 `aab install`，它会备份、会清旧名、是幂等的
 - 不要代写 WorkBuddy 的信任记录（`~/.workbuddy/mcp-approvals.json`）：那是人工安全闸
 - 不要 `git add -A` 之前不 `git status`：`npm pack` 的产物曾经这样被提交进仓库并推上 GitHub
 - 不要把"我这边验证不了"写成"做不到"：先查官方文档，再决定是标注未验证还是降级

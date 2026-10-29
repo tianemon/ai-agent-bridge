@@ -65,11 +65,12 @@ npx -y @tianemon/ai-agent-bridge doctor      # 能读到谁的会话、哪个客
 
 ## 安装
 
-`install` 只写本机确实存在的客户端配置，写入前备份，可重复执行。
+`install` 只写本机确实存在的客户端配置，写入前备份，可重复执行。支持 WorkBuddy、Codex、Claude Code、EasyMint。
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install --dry-run          # 只打印要写什么
 npx -y @tianemon/ai-agent-bridge install --agent codex,claude  # 限定客户端
+npx -y @tianemon/ai-agent-bridge install easymint           # 只写 EasyMint（等价 --agent easymint）
 aab prompt                                                  # 打印可交给 agent 执行的指令
 ```
 
@@ -117,6 +118,21 @@ startup_timeout_sec = 20
 
 ```bash
 claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-bridge/bin/aab.mjs mcp
+```
+
+**EasyMint** — `<EASYMINT_HOME>/agent/mcp.json`（默认 `~/.easymint/agent/mcp.json`；旧位置 `~/.easymint/mcp.json` 里还有条目时沿用旧文件，不另建新文件）
+
+```json
+{
+  "mcpServers": {
+    "aab": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/you/dev/ai-agent-bridge/bin/aab.mjs", "mcp"],
+      "description": "读取其它 AI 编码工具的会话"
+    }
+  }
+}
 ```
 
 工具：`session_latest`、`session_list`、`session_read`、`session_grep`、`session_agents`。

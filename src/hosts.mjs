@@ -2,7 +2,7 @@
  * 宿主（host）与读取源（reader）是两件事，别混：
  *
  *   reader = 会话格式能被读的工具（codex / claude / easymint）
- *   host   = 能挂 MCP、从而调用本工具的工具（workbuddy / codex / claude / 未来的 cursor…）
+ *   host   = 能挂 MCP、从而调用本工具的工具（workbuddy / codex / claude / easymint / 未来的 cursor…）
  *
  * codex 与 claude 两者都是；workbuddy 只是 host。
  * 检测一律"文件存在才算"，用户没装的客户端一个字都不写。
@@ -17,7 +17,46 @@ const HOME = os.homedir();
 export const NAME = "aab";
 export const LEGACY = ["pickup", "session-bridge"];
 
+/** 与 EasyMint 的 resolveHome 一致：支持 EASYMINT_HOME 覆盖（去空白、展开 ~），缺省 ~/.easymint */
+export function easymintHome() {
+  const override = process.env.EASYMINT_HOME?.trim();
+  return override ? (override.startsWith("~") ? path.join(HOME, override.slice(1)) : override) : path.join(HOME, ".easymint");
+}
+
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** 与 EasyMint 的 readMcpServersFile 同语义：缺 mcpServers 算空配置（有效），结构不对算损坏 */
+export function readEasymintConfig(file) {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+    return isObject(cfg) && (cfg.mcpServers === undefined || isObject(cfg.mcpServers)) ? cfg : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 跟随 EasyMint 的 userMcpPath：旧位置还有条目时就用旧文件，
+ *  否则往新位置新建会把旧文件里的其它 server 整批遮蔽掉 */
+function easymintConfigPath() {
+  const current = path.join(easymintHome(), "agent", "mcp.json");
+  if (readEasymintConfig(current) !== undefined) return current;
+  const legacy = path.join(easymintHome(), "mcp.json");
+  const cfg = readEasymintConfig(legacy);
+  return cfg && Object.keys(cfg.mcpServers || {}).length ? legacy : current;
+}
+
 export const HOSTS = {
+  easymint: {
+    label: "EasyMint",
+    get config() { return easymintConfigPath(); },
+    detect: () => {
+      try {
+        return fs.statSync(easymintHome()).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+  },
   workbuddy: {
     label: "WorkBuddy",
     config: path.join(HOME, ".workbuddy", "mcp.json"),
@@ -55,6 +94,9 @@ export function registered(host) {
       return false;
     }
   }
+  if (host === "easymint") {
+    return !!readEasymintConfig(HOSTS.easymint.config)?.mcpServers?.[NAME];
+  }
   if (host === "codex") {
     try {
       const text = fs.readFileSync(HOSTS.codex.config, "utf8");
@@ -65,6 +107,7 @@ export function registered(host) {
       return false;
     }
   }
+  if (host !== "claude") return null;
   try {
     const out = execFileSync("claude", ["mcp", "list"], {
       encoding: "utf8",

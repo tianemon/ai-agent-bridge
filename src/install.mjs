@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, approvalState, recordEntry, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, NAME, LEGACY } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 
 const TOML_HEADER = `[mcp_servers.${NAME}]`;
@@ -98,7 +98,7 @@ function applyWorkbuddy({ dryRun }) {
   const dropped = LEGACY.filter((k) => cfg.mcpServers[k]);
   for (const k of dropped) delete cfg.mcpServers[k];
   if (!dropped.length && JSON.stringify(cfg.mcpServers[NAME]) === JSON.stringify(entry)) {
-    recordEntry("workbuddy", entry); // 即使跳过写入也要记时间，doctor 才判断得出信任是否早于配置
+    if (!dryRun) recordEntry("workbuddy", entry); // 即使跳过写入也要记时间，doctor 才判断得出信任是否早于配置
     return { ok: true, msg: tr("install.m.current", { file }) };
   }
   cfg.mcpServers[NAME] = entry;
@@ -108,6 +108,51 @@ function applyWorkbuddy({ dryRun }) {
   const bak = backup(file);
   fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
   recordEntry("workbuddy", entry);
+  return {
+    ok: true,
+    msg: tr("install.m.done", {
+      file,
+      bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "",
+      legacy: dropped.length ? tr("install.m.legacy", { names: dropped.join(", ") }) : "",
+      replaced: "",
+    }),
+  };
+}
+
+/* ── EasyMint：JSON merge at the effective user path ── */
+function applyEasymint({ dryRun }) {
+  const file = HOSTS.easymint.config;
+  const exists = fs.existsSync(file);
+  const cfg = exists ? readEasymintConfig(file) : {};
+  if (!cfg) return { ok: false, msg: tr("install.m.invalidConfig", { file }) };
+
+  const { command, args } = commandFor();
+  // EasyMint 的 description 会进它的 mcp_servers 分节，模型靠它判断"要不要到这里找外部能力"
+  const entry = { type: "stdio", command, args, description: tr("install.easymintDescription") };
+  cfg.mcpServers ||= {};
+  const dropped = LEGACY.filter((k) => Object.hasOwn(cfg.mcpServers, k));
+  for (const k of dropped) delete cfg.mcpServers[k];
+  if (!dropped.length && JSON.stringify(cfg.mcpServers[NAME]) === JSON.stringify(entry)) {
+    return { ok: true, msg: tr("install.m.current", { file }) };
+  }
+  cfg.mcpServers[NAME] = entry;
+  if (dryRun) return { ok: true, msg: tr("install.m.plan", { file, replaced: "" }) };
+
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // 同目录临时文件 + rename：EasyMint 读到的永远是完整的 JSON（写一半就会解析失败并回退旧路径）
+  const tmp = `${file}.aab-tmp`;
+  fs.rmSync(tmp, { force: true });
+  let bak = "";
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2) + "\n", {
+      mode: exists ? fs.statSync(file).mode & 0o777 : 0o600,
+      flag: "wx",
+    });
+    bak = backup(file);
+    fs.renameSync(tmp, file);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
   return {
     ok: true,
     msg: tr("install.m.done", {
@@ -211,7 +256,7 @@ function applyClaude({ dryRun }) {
   }
 }
 
-const APPLY = { workbuddy: applyWorkbuddy, codex: applyCodex, claude: applyClaude };
+const APPLY = { easymint: applyEasymint, workbuddy: applyWorkbuddy, codex: applyCodex, claude: applyClaude };
 
 /**
  * @param {object} o
@@ -219,9 +264,11 @@ const APPLY = { workbuddy: applyWorkbuddy, codex: applyCodex, claude: applyClaud
  * @param {boolean} o.dryRun
  */
 export function install({ targets, dryRun = false } = {}) {
+  const unknown = (targets || []).filter((t) => t !== "auto" && !Object.hasOwn(HOSTS, t));
+  // Validate before detection: even a rejected explicit target must not wake another host.
+  if (unknown.length) return tr("install.unknown", { list: unknown.join(tr("list.sep")) });
   const detected = detectHosts();
-  const unknown = (targets || []).filter((t) => !HOSTS[t]);
-  const chosen = targets?.length ? targets.filter((t) => HOSTS[t]) : detected;
+  const chosen = targets?.length && !targets.includes("auto") ? [...new Set(targets)] : detected;
   const skipped = Object.keys(HOSTS).filter((h) => !chosen.includes(h));
 
   const { command, args, note } = commandFor();

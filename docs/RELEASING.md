@@ -9,7 +9,7 @@
 | 角色 | 路径 | 谁在用 |
 |---|---|---|
 | **源码（开发）** | `/Users/amon/dev/project/ai-agent-bridge` | 改代码、跑测试、打包 |
-| **生产（安装）** | `/opt/homebrew/lib/node_modules/@tianemon/ai-agent-bridge` | 三家宿主的 MCP 配置指向它；`aab` 命令走它 |
+| **生产（安装）** | `/opt/homebrew/lib/node_modules/@tianemon/ai-agent-bridge` | 各家宿主的 MCP 配置指向它；`aab` 命令走它 |
 
 判断当前是哪一种：
 
@@ -19,15 +19,21 @@ aab doctor | sed -n '/runtime/,+5p'      # 中文环境把 runtime 换成 运行
 # mode  开发目录（开发态…）        → 源码
 ```
 
-三家宿主写死的都是**绝对路径**（不依赖 `PATH`，GUI 宿主也能启动）：
+四家宿主写入的都是**绝对路径**（不依赖 `PATH`，GUI 宿主也能启动）：
 
 ```
 ~/.workbuddy/mcp.json          mcpServers.aab = {command: <node>, args: [<生产路径>/bin/aab.mjs, "mcp"]}
 ~/.codex/config.toml           [mcp_servers.aab] 同上
 claude mcp (user scope)        同上
+~/.easymint/agent/mcp.json     mcpServers.aab = {type: "stdio", command: <node>, args: [<生产路径>/bin/aab.mjs, "mcp"]}
 ```
 
----
+### EasyMint 的路径规则（改 `hosts.mjs` / `install.mjs` 前必读）
+
+- 生效路径跟 EasyMint 自己的 `userMcpPath()` 对齐：`<EASYMINT_HOME>/agent/mcp.json`（`EASYMINT_HOME` 去空白、展开 `~`，缺省 `~/.easymint`）；只有该文件缺失或损坏时，才回退到旧位置 `<EASYMINT_HOME>/mcp.json`，且旧文件里**有非空 `mcpServers`** 才接管。
+- 所以安装器**不能**在旧配置还在用时另建新文件——那会把旧文件里的其它 server 整批遮蔽掉。迁移是 EasyMint 自己的事，`aab` 不代劳。
+- 合并写 `mcpServers.aab`，保留其它 server 和顶层字段；配置损坏就拒绝，不覆盖；同目录临时文件 + `rename` 原子替换，免得 EasyMint 读到半截 JSON。
+- 不碰 `em-settings.json`（隐藏/启用列表在那里），user scope 也不需要审批。
 
 ## 1. 安装原则
 
@@ -38,7 +44,7 @@ npm i -g @tianemon/ai-agent-bridge@<version> --registry=https://registry.npmjs.o
 ```
 
 - 这样生产里跑的就是**别人 `npx` 能装到的那份字节**，`aab doctor` 显示 `npm 全局安装`
-- 升级到新版本时**路径不变** → 三家的 MCP 配置不用重写，WorkBuddy 的信任指纹也不变
+- 升级到新版本时**路径不变** → 各家的 MCP 配置不用重写，WorkBuddy 的信任指纹也不变
 
 ### 开发期想立刻验证改动，用打包安装，不要 link
 
@@ -56,7 +62,7 @@ npm i -g /tmp/tianemon-ai-agent-bridge-<ver>.tgz
 2. **不要把全局包装进宿主自带运行时**（`~/.workbuddy/binaries/node/versions/<v>/...`）。
    宿主升级会整块替换该目录，装进去的包直接消失；而且 `which -a aab` 会出现两个，
    `PATH` 顺序决定你敲到哪一个。
-3. **不要手改三家宿主的 MCP 配置**。用 `aab install`：它会备份、会清旧名（`pickup`/`session-bridge`）、
+3. **不要手改宿主自己的 MCP 配置**。用 `aab install`：它会备份、会清旧名（`pickup`/`session-bridge`）、
    重复执行不累积。它**只写本机确实装了的客户端**，没装的跳过。
 
 ---

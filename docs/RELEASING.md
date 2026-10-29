@@ -116,22 +116,25 @@ git push origin main
 
 ### 3.4 发布（需要人工过 2FA）
 
-按 npm 现在的规则，发布必须验证：**`--auth-type=web` + security key**，不需要 6 位验证码。
+按 npm 现在的规则，发布必须验证：**`--auth-type=web`**，不需要 6 位验证码。
+
+⚠️ **必须给 npm 一个真终端**，否则它把授权链接打成 `https://www.npmjs.com/auth/cli/***`（占位符，没法点）。
+`script -q /dev/null` 在本机不行（socket 上 `tcgetattr: Operation not supported on socket`），用 Python 的 pty：
 
 ```bash
-rm -f /tmp/npm-pub-$V.log
-(script -q /dev/null npm publish --auth-type=web > /tmp/npm-pub-$V.log 2>&1 &)
-sleep 10
-sed -e 's/\x1b\[[0-9;]*m//g' /tmp/npm-pub-$V.log \
-  | grep -oE "https://www\.npmjs\.com/auth/cli/[a-f0-9-]+" | head -1
+cd /Users/amon/dev/project/ai-agent-bridge
+python3 -c 'import pty,sys; sys.exit(pty.spawn(["npm","publish","--auth-type=web","--registry=https://registry.npmjs.org/"]))'
 ```
 
-**把这条链接发给用户点一下**（这一步只能人做）。然后等回执：
+跑起来后从输出里取链接（后台执行时代码块落盘日志，读日志里的 `auth/cli/<uuid>`）：
 
-```bash
-sed -e 's/\x1b\[[0-9;]*m//g' /tmp/npm-pub-$V.log \
-  | tr -s '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' ' ' | grep -E "\+ @tianemon|npm error" | head -3
+```text
+Authenticate your account at:
+https://www.npmjs.com/auth/cli/<uuid>
 ```
+
+**把这条链接原样发到会话里让人去点**（这一步只能人做）。链接出现后不要 Ctrl-C：进程会轮询等待，授权完成会打印
+`+ @tianemon/ai-agent-bridge@<ver>` 并以 0 退出。
 
 ### 3.5 等元数据、比对指纹（不可跳过）
 
@@ -197,6 +200,8 @@ git status --short | wc -l; git rev-list --count origin/main..HEAD            # 
 | WorkBuddy 显示"信任记录对应的是旧配置" | 配置 entry 变过（路径/参数） | 让人点一次：连接器 → 自定义连接器 → aab → 信任 |
 | `which -a aab` 有两个 | 有会话往宿主运行时里装过 | 删掉宿主运行时那份符号链接/目录，只保留 `/opt/homebrew/bin/aab` |
 | MCP 里读到的还是旧描述 | 宿主进程没重启 | **退出重开宿主**（不是新开会话） |
+| 发布时授权链接显示成 `auth/cli/***` | npm 在非终端环境下把链接打了马赛克（不是日志脱敏） | 用 pty 跑（§3.4）；`script -q /dev/null` 在本机报 `tcgetattr: Operation not supported on socket`，不要用 |
+| `npm whoami` 返回 E401 | 登录 token 过期/被吊销 | `npm login --auth-type=web --registry=https://registry.npmjs.org/`，同样用 pty 跑取链接 |
 
 **授权失败不等于登录失效。** `npm whoami --registry=https://registry.npmjs.org/` 能回 `tianemon`
 就说明 token 还在，直接重起发布即可。

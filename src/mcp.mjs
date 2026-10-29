@@ -28,9 +28,13 @@ const INSTRUCTIONS = [
   `aab reads another AI coding tool's session (${TOOL_LIST}) — newest conclusion first, deeper only if needed. `,
   // 触发词按"用户真实说法"列，不按工具语义列：实测中文查询里「查看/接着/继续」这类动词，
   // 与「会话/对话/记录」这类名词是模型发起检索时唯一会用到的字面，少一个就搜不到。
-  "中文触发（命中任一即用 session_latest）：查看/读取/看看/翻一下/查一下 <工具名> 的会话、对话、聊天记录、历史；",
-  "接着/继续 <工具名> 最新会话 做下去；继续上一个会话；<工具名> 那边做到哪了、干到哪了；接手之前的活。",
-  'English triggers: "read the latest codex session", "where did claude get to", ',
+  // 工具名必须写死字面值（codex / workbuddy …）：模型是按字面匹配的，留 <工具名> 占位符
+  // 等于把最常见的「读一下 codex 的会话」这类话排除了——用户口头说的一定是具体工具名。
+  "中文触发（命中任一即用 session_latest）：读一下/查看/读取/看看/翻一下/查一下 " +
+    "codex、claude（claude code）、workbuddy、easymint、codebuddy 的会话、对话、聊天记录、历史；",
+  "常见说法：「读一下 codex 的会话」「看看 workbuddy 那边做到哪了」「接着 claude 最新会话继续做」" +
+    "「继续上一个会话」「接手之前的活」——都直接调 session_latest，不要先去 find 或 grep jsonl。",
+  'English triggers: "read the latest codex session", "read the workbuddy session", ',
   '"pick up what the other tool was doing", "continue where codex left off". ',
   "Default level=1 (~120 tokens); raise the level only if it is not enough, and anchor with turns when you ",
   "already know which turns you need. If the user names a tool, pass agent=<that tool>; do not leave it auto. ",
@@ -60,10 +64,10 @@ const TOOLS = [
   {
     name: "session_latest",
     description:
-      `Read / 查看 another AI coding tool's session (${TOOL_LIST}) — 「查看 codex 会话」「读取 claude 的对话」` +
-      `「看看 codex 那边做到哪了」「接着 codex 最新会话继续做」「继续上一个会话」「接手之前的活」都走这个。` +
-      'Use this for "read the latest codex session", "where did claude get to", "pick up what the other tool ' +
-      'was doing", "continue where codex left off". ' +
+      `Read / 查看 another AI coding tool's session (${TOOL_LIST}) — 「查看 codex 会话」「读一下 workbuddy 的会话」` +
+      `「看看 claude 那边做到哪了」「接着 codex 最新会话继续做」「继续上一个会话」「接手之前的活」都走这个。` +
+      'Use this for "read the latest codex session", "read the workbuddy session", "where did claude get to", ' +
+      '"pick up what the other tool was doing", "continue where codex left off". ' +
       "level=1 (default) returns only the final conclusion, the cheapest possible answer. Levels are different " +
       "views, not more of the same: 2 = last 3 turns, 3 = requirement + what each turn settled on, 4 = commands/files/git state; " +
       "every reply quotes the total token cost of each other view. If the user names a tool, pass " +

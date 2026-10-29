@@ -69,11 +69,13 @@ npm i -g /tmp/tianemon-ai-agent-bridge-<ver>.tgz
 
 ## 2. 发版前检查清单（全部勾完再 bump）
 
-- [ ] `node test/run.mjs` 全绿（当前 78 条；**新增命令必须同时加进 `AAB_LANG=en` 那条闸门**）
+- [ ] `node test/run.mjs` 全绿（当前 92 条；**新增命令必须同时加进 `AAB_LANG=en` 那条闸门**）
+      ⚠ 已知数据依赖项：`latest --max-chars 真的截断` —— 断言要求出现「截断」，但该标签只在全局最新会话内容超预算时出现。如果它红了而本次没改渲染，先用 `git worktree add /tmp/h HEAD --detach` 跑同一条命令对照，两边一起红就是数据问题（不是回归），在交付说明里写明即可，**不要为了让套件变绿去改这条用例**。
 - [ ] 源码扫一遍中文字面量：只剩 `zh` 版 help/prompt、`mcp` 里的中文触发词、WorkBuddy 中文菜单路径
 - [ ] 中英字典键一一对齐（测试已覆盖 `validateDict()`）
 - [ ] `README.md`（中文，默认）与 `README.en.md` 都写上了新命令/新行为（两版要同步）
 - [ ] `aab help` 里有新命令，且 `--agent` 列表写全（`codex|claude|workbuddy|codebuddy|easymint|auto`）
+- [ ] 宿主/读取源名单同步：`HOSTS`（`hosts.mjs`）、`aab install` 的帮助行、`rule.mjs` 的 zh/en 两段、两份 README
 - [ ] `git status` 干净；没有 `*.tgz` 之类打包产物被跟踪
 - [ ] 结论里有"发布后才可能发现"的项，就在**这一步**查，不要留到发布后
 
@@ -84,7 +86,7 @@ npm i -g /tmp/tianemon-ai-agent-bridge-<ver>.tgz
 
 ## 3. 一次完整发布（照抄即可）
 
-设 `V=0.1.7`（下一个可用版本；**已发布的版本号永久占用，不能重发**）。
+设 `V=0.1.9`（下一个可用版本；**已发布的版本号永久占用，不能重发**）。
 
 ### 3.1 升版本
 
@@ -218,10 +220,10 @@ git status --short | wc -l; git rev-list --count origin/main..HEAD            # 
 
 ## 6. 让 MCP 侧真的加载新东西
 
-改的是**工具描述 / initialize instructions / 工具名**时：
+改的是**工具描述 / initialize instructions / 工具名 / 宿主清单**时：
 
 1. 生产副本换成新版本（3.8）
-2. **重启宿主**（WorkBuddy：退出应用再打开）
+2. **重启宿主**（WorkBuddy：退出应用再打开；EasyMint：退出重开更稳，实测有时新会话也能拾到）
 3. 验证：
 
 ```bash

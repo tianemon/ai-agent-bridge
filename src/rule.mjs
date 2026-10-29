@@ -20,7 +20,7 @@ import { isZh } from "./i18n.mjs";
 
 const ZH = `### 读其它 AI 工具的会话（aab）
 
-读 / 查其他 AI 编码工具（codex / claude / codebuddy / workbuddy）的会话时，**一律走 aab MCP**
+读 / 查其他 AI 编码工具（codex / claude / codebuddy / workbuddy / easymint）的会话时，**一律走 aab MCP**
 （\`mcp__aab__*\`，deferred 工具，先检索再调用）；**不要自己解析 \`rollout-*.jsonl\` 或 session sqlite**
 ——单个线程可达 50MB+，必撑爆上下文。
 
@@ -40,7 +40,7 @@ const ZH = `### 读其它 AI 工具的会话（aab）
 
 const EN = `### Reading another AI tool's session (aab)
 
-Whenever you need another AI coding tool's session (codex / claude / codebuddy / workbuddy), **use the aab
+Whenever you need another AI coding tool's session (codex / claude / codebuddy / workbuddy / easymint), **use the aab
 MCP server** (\`mcp__aab__*\`, a deferred tool — search for it first); **do not parse \`rollout-*.jsonl\` or
 session sqlite by hand** — a single thread can exceed 50MB and will blow up the context.
 

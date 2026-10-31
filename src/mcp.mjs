@@ -7,7 +7,7 @@
  */
 import readline from "node:readline";
 import { AGENTS, AGENT_LABEL } from "./registry.mjs";
-import { actLatest, actRead, actList, actGrep } from "./cli.mjs";
+import { actLatest, actRead, actList, actGrep, actUsage } from "./cli.mjs";
 
 import { VERSION } from "./version.mjs";
 import { t as tr } from "./i18n.mjs";
@@ -38,6 +38,7 @@ const INSTRUCTIONS = [
   '"pick up what the other tool was doing", "continue where codex left off". ',
   "Default level=1 (~120 tokens); raise the level only if it is not enough, and anchor with turns when you ",
   "already know which turns you need. If the user names a tool, pass agent=<that tool>; do not leave it auto. ",
+  "For token usage, model, cache and subagent accounting use session_usage, not session_read or raw logs. ",
   "Routing: unknown session -> session_list; known id/prefix -> session_read; one specific detail -> ",
   "session_grep (hits carry the turn number, then session_read with turns=<N>; newest sessions first, so ",
   "pass agent/since when the current session eats the limit). ",
@@ -61,6 +62,22 @@ const KNOWN_SCHEMA = {
 };
 
 const TOOLS = [
+  {
+    name: "session_usage",
+    description: "Read-only Codex token usage and model metadata / 用量、额度消耗、模型、缓存、子 Agent 统计. No conversation content or credentials. Uses per-response usage records when available; legacy cumulative deltas otherwise, never sums both. Cached input and reasoning are subsets. Account rate snapshots are shared, not per-thread charges. Supports inclusive since/until and native execution turn IDs (not session_read turn numbers). Defaults to main thread only; includeChildren adds recorded descendant threads. Other agents are not yet supported. Does not estimate subscription charges.",
+    inputSchema: {
+      type: "object", properties: {
+        agent: { type: "string", enum: ["codex"], default: "codex" },
+        session: { type: "string", description: "Physical thread ID or unique prefix; defaults to newest root thread" },
+        project: { type: "string", description: "Optional absolute project path" },
+        since: { type: "string", description: "Inclusive usage event time lower bound, e.g. 24h or ISO timestamp" },
+        until: { type: "string", description: "Inclusive usage event time upper bound; prefer ISO timestamp" },
+        turnId: { type: "string", description: "Native execution turn UUID; also matches descendant root_turn_id" },
+        includeChildren: { type: "boolean", default: false },
+        json: { type: "boolean", default: false, description: "Full structured metadata instead of compact text" },
+      },
+    },
+  },
   {
     name: "session_latest",
     description:
@@ -200,6 +217,8 @@ const toOpts = (args = {}) => {
 async function callTool(name, args = {}) {
   const o = toOpts(args);
   switch (name) {
+    case "session_usage":
+      return actUsage(o);
     case "session_latest":
       return actLatest(o);
     case "session_list":

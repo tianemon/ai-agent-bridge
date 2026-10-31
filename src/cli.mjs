@@ -19,6 +19,7 @@ import { install } from "./install.mjs";
 import { doctor } from "./doctor.mjs";
 import { prompt } from "./prompt.mjs";
 import { rule } from "./rule.mjs";
+import { sessionUsage, renderUsage } from "./usage.mjs";
 import { VERSION } from "./version.mjs";
 import { t as tr, isZh } from "./i18n.mjs";
 
@@ -142,6 +143,14 @@ export async function actRead(o) {
         : tr("cli.noneAgent", { agent: AGENT_LABEL[input.agent] || input.agent });
   const loaded = await loadSession(s);
   return warningsOf(input.warnings) + render(loaded, { level: o.level, maxChars: o["max-chars"], turns: input.turns });
+}
+
+export async function actUsage(o) {
+  const report = await sessionUsage({ agent: o.agent || "codex", session: o.session,
+    project: o.project ? defaultProject(o.project) : "", since: o.since, until: o.until,
+    turnId: o["turn-id"] ?? o.turnId,
+    includeChildren: o["include-children"] === "true" || o.includeChildren === true });
+  return o.json === "true" || o.json === true ? JSON.stringify(report, null, 2) : renderUsage(report);
 }
 
 export function actList(o) {
@@ -278,7 +287,7 @@ Usage:
 Output language: AAB_LANG=zh|en overrides; otherwise LC_ALL / LANG (English by default).
 Conversation text is never translated — only the surrounding labels.`;
 
-const helpText = () => (isZh() ? HELP_ZH : HELP_EN);
+const helpText = () => (isZh() ? HELP_ZH : HELP_EN) + "\n\n" + tr("usage.help");
 
 /* ── 入口 ── */
 export async function runCli(argv) {
@@ -294,6 +303,8 @@ export async function runCli(argv) {
       return actList(o);
     case "grep":
       return actGrep(o);
+    case "usage":
+      return actUsage(o);
     case "agents":
       return AGENTS.map((a) => `${a}  ${AGENT_LABEL[a]}`).join("\n");
     case "install": {

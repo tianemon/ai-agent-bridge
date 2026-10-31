@@ -5,6 +5,7 @@
  * 没有会话的工具会被跳过而不是判失败——这个工具的价值取决于本机有什么。
  * 判定原则：不崩、不错范围、不撒谎（不把旁白当结论、不把别的项目当本项目）。
  */
+import { usageTests } from "./usage.mjs";
 import { spawnSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -75,8 +76,8 @@ console.log(`本机可用工具：${agents.join(", ") || "（无）"}\n`);
 check("help 列出全部子命令", () => {
   const r = run(["help"]);
   noCrash(r);
-  for (const c of ["latest", "list", "read", "grep", "mcp"]) has(r.out, c);
-  return "5 个子命令";
+  for (const c of ["latest", "list", "read", "grep", "usage", "mcp"]) has(r.out, c);
+  return "6 个子命令";
 });
 
 check("agents 列表带说明", () => {
@@ -670,6 +671,7 @@ check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
     ["nosuchcmd"],
     ["latest", "--agent", "cursor"],
     ["grep"],
+    ["usage", "--agent", "claude"],
     { args: ["list", "--since", "1s"], home: emptyHome },
   ];
   const bad = [];
@@ -952,10 +954,10 @@ await mcpCheck("notifications 不产生响应", async () => {
   return "ok";
 });
 
-await mcpCheck("tools/list 出 5 个工具", async () => {
+await mcpCheck("tools/list 出 6 个工具", async () => {
   const r = await mcpRoundtrip([{ jsonrpc: "2.0", id: 2, method: "tools/list" }], 1200);
   const names = (r[0]?.result?.tools || []).map((t) => t.name);
-  for (const w of ["session_latest", "session_list", "session_read", "session_grep", "session_agents"]) {
+  for (const w of ["session_latest", "session_list", "session_read", "session_grep", "session_agents", "session_usage"]) {
     if (!names.includes(w)) throw new Error(`缺 ${w}`);
   }
   return names.join(",");
@@ -1016,6 +1018,13 @@ await mcpCheck("坏 JSON 行之后仍能响应", async () => {
 });
 
 /* ── 汇总 ── */
+await mcpCheck("usage metadata isolated regressions", async () => `${await usageTests()} cases`);
+await mcpCheck("session_usage MCP rejects unsupported sources without reading content", async () => {
+  const r = await mcpRoundtrip([{ jsonrpc: "2.0", id: 88, method: "tools/call", params: { name: "session_usage", arguments: { agent: "claude" } } }], 1200);
+  if (!r[0]?.result?.isError) throw new Error("unsupported source was not rejected");
+  return "ok";
+});
+
 const all = [...results, ...mcpCases];
 const bad = all.filter((r) => !r.pass);
 for (const r of all) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}  —  ${r.detail}`);

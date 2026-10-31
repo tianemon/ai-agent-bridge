@@ -293,3 +293,20 @@ Release and installation rules live in [`docs/RELEASING.md`](docs/RELEASING.md),
 ## License
 
 MIT
+
+
+### Usage and model accounting (Codex)
+
+`aab usage` / MCP `session_usage` reads usage metadata only, without returning conversation content, tool output or credentials. Currently only Codex is supported; other sources are explicitly rejected rather than reported as zero usage.
+
+```bash
+aab usage --session <thread-id> --include-children
+aab usage --session <thread-id> --since 2026-10-31T01:26:55Z --until 2026-10-31T01:52:40Z --json
+aab usage --session <thread-id> --turn-id <execution-turn-uuid>
+```
+
+The newest root thread is selected by default; `--project` optionally restricts it. `--include-children` recursively follows physical thread/parent IDs, keeping subagents with a shared session_id separate. `--turn-id` is a native Codex execution UUID, not a `read --turns` number; descendant root_turn_id also matches. Time bounds are inclusive and apply to usage event timestamps. Text lists the latest 15 execution turns; JSON retains all summaries.
+
+Reports include recorded model/reasoning/service tiers, input/cached input/output/reasoning tokens, mean and maximum input per response, turn summaries, compactions and first/last rate-limit snapshots. Per-response records deduplicated by response ID take precedence; legacy cumulative deltas are a fallback and never added to the response stream. Cached input is a subset of input; reasoning is a subset of output. Incomplete coverage, resets, missing fields and unavailable records are disclosed; missing-field columns sum only the recorded portion.
+
+**Tokens are not a subscription billing statement.** Rate snapshots are account-wide, not exclusive thread charges, and must not be summed across threads. Missing models/tiers show `?`. Legacy delta counts are not guaranteed request counts, and the first cumulative total can include unrecorded history. No model requests or online account queries are made.

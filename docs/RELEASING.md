@@ -105,6 +105,11 @@ npm run pack                            # → /tmp/tianemon-ai-agent-bridge-$V.t
 ls *.tgz 2>/dev/null                    # 必须为空：产物不许落仓库
 ```
 
+**必须用与发布同一个 npm 打包。** 不同 npm 版本对同一批文件产出的 tar 元数据不同，shasum 就不一样
+（0.2.1 实测：Homebrew npm 11.19.0 打出 `02d27b31…`，宿主 npm 10.9.7 打包后与线上 `a6ef49d1…` 完全一致，
+解包后每个文件逐字节相同）。打包前的 `npm -v` 与发布时用的必须是同一个，否则后面「线上 shasum ≠ 本地」
+会误判成"内容不一致"。
+
 ### 3.3 提交并推送
 
 ```bash
@@ -195,7 +200,7 @@ git status --short | wc -l; git rev-list --count origin/main..HEAD            # 
 |---|---|---|
 | `npm error code E404 … /-/v1/done?authId=` | 授权链接的会话过期（或已被消费） | 重新执行 3.4，用**新链接** |
 | `npm view dist.shasum` 一直为空 | 元数据未生成（1–3 分钟） | 继续等；超过 10 分钟再看 `npm status` |
-| 线上 shasum ≠ 本地 | 打包内容与提交不一致（脏工作树） | 删 tag 重来，别硬发 |
+| 线上 shasum ≠ 本地 | ①两次打包用的 npm 版本不同（先核对 `npm -v`，见 3.2）②工作树脏 | 先按 ① 用同版本 npm 重打一次并对文件逐个 `cmp`；确认内容一致才继续，真不一致再删 tag 重来 |
 | `cannot publish over previously published version` | 版本号已存在 | `npm version patch` 后重发；**不要试图重发同号** |
 | WorkBuddy 显示"信任记录对应的是旧配置" | 配置 entry 变过（路径/参数） | 让人点一次：连接器 → 自定义连接器 → aab → 信任 |
 | `which -a aab` 有两个 | 有会话往宿主运行时里装过 | 删掉宿主运行时那份符号链接/目录，只保留 `/opt/homebrew/bin/aab` |

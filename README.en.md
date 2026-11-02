@@ -66,7 +66,7 @@ explicitly and appends the most recent turn that has one, with its turn number a
 ## Install
 
 `install` writes configuration only for clients actually present on the machine, backs up before writing, and
-is idempotent. Supported hosts: WorkBuddy, Codex, Claude Code, EasyMint.
+is idempotent. Supported hosts: WorkBuddy, Codex, Claude Code, EasyMint, DeepSeek Harness (desktop profile).
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install --dry-run              # print what would be written
@@ -137,6 +137,24 @@ claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-b
   }
 }
 ```
+
+**DeepSeek Harness** — `~/.dsh/profiles/desktop/cordis.patch.yml` (the desktop profile's user override layer;
+append one entry)
+
+```yaml
+- insert:
+    - name: '@deepseek-ai/dsh-mcp-client'
+      id: aab
+      config:
+        serverName: aab
+        transport: stdio
+        command: "/opt/homebrew/bin/node"
+        args:
+          - "/Users/you/dev/ai-agent-bridge/bin/aab.mjs"
+          - mcp
+```
+
+Restart the desktop app afterwards — profiles are read at process start.
 
 Tools: `session_latest`, `session_list`, `session_read`, `session_grep`, `session_agents`.
 

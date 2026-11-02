@@ -1,10 +1,10 @@
 /**
  * 宿主（host）与读取源（reader）是两件事，别混：
  *
- *   reader = 会话格式能被读的工具（codex / claude / easymint）
- *   host   = 能挂 MCP、从而调用本工具的工具（workbuddy / codex / claude / easymint / 未来的 cursor…）
+ *   reader = 会话格式能被读的工具（codex / claude / easymint / dsh）
+ *   host   = 能挂 MCP、从而调用本工具的工具（workbuddy / codex / claude / easymint / dsh / 未来的 cursor…）
  *
- * codex 与 claude 两者都是；workbuddy 只是 host。
+ * codex、claude、easymint、dsh 既是 reader 也是 host；workbuddy 只是 host。
  * 检测一律"文件存在才算"，用户没装的客户端一个字都不写。
  */
 import fs from "node:fs";
@@ -21,6 +21,21 @@ export const LEGACY = ["pickup", "session-bridge"];
 export function easymintHome() {
   const override = process.env.EASYMINT_HOME?.trim();
   return override ? (override.startsWith("~") ? path.join(HOME, override.slice(1)) : override) : path.join(HOME, ".easymint");
+}
+
+/** DeepSeek Harness 的 profile 根目录；DSH_HOME 与 CLI 的约定一致，缺省 ~/.dsh */
+export function dshHome() {
+  const override = process.env.DSH_HOME?.trim();
+  return override ? (override.startsWith("~") ? path.join(HOME, override.slice(1)) : override) : path.join(HOME, ".dsh");
+}
+
+/**
+ * DSH 的 profile 是"启动模式的独立配置树"（web / desktop / tui…），
+ * 每个 profile 的用户覆写层是 cordis.patch.yml。
+ * 这里只认 desktop：它由 Electron 应用读写，web 等其它 profile 不代管。
+ */
+export function dshPatchPath(profile = "desktop") {
+  return path.join(dshHome(), "profiles", profile, "cordis.patch.yml");
 }
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -57,6 +72,18 @@ export const HOSTS = {
       }
     },
   },
+  dsh: {
+    // 只认 desktop profile：DSH 桌面版由 Electron 管理，web/tui 等 profile 不代管
+    label: "DeepSeek Harness",
+    get config() { return dshPatchPath("desktop"); },
+    detect: () => {
+      try {
+        return fs.statSync(path.join(dshHome(), "profiles", "desktop")).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+  },
   workbuddy: {
     label: "WorkBuddy",
     config: path.join(HOME, ".workbuddy", "mcp.json"),
@@ -85,6 +112,19 @@ export const HOSTS = {
   },
 };
 
+/** DSH 的 cordis.patch.yml 里是否已有 aab 条目（我们写的 id: aab，或手写的插件名） */
+export function dshPatchHasAab(file) {
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    return (
+      /^\s*-?\s*id:\s*['"]?aab['"]?\s*$/m.test(text) ||
+      /^\s*-?\s*name:\s*['"]?@deepseek-ai\/dsh-mcp-client['"]?\s*$/m.test(text)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** 已注册返回 true；未注册 false；宿主 CLI 不可用返回 null */
 export function registered(host) {
   if (host === "workbuddy") {
@@ -96,6 +136,9 @@ export function registered(host) {
   }
   if (host === "easymint") {
     return !!readEasymintConfig(HOSTS.easymint.config)?.mcpServers?.[NAME];
+  }
+  if (host === "dsh") {
+    return dshPatchHasAab(HOSTS.dsh.config);
   }
   if (host === "codex") {
     try {

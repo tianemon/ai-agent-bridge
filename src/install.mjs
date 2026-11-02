@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, NAME, LEGACY } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 
 const TOML_HEADER = `[mcp_servers.${NAME}]`;
@@ -164,6 +164,62 @@ function applyEasymint({ dryRun }) {
   };
 }
 
+/* ── DeepSeek Harness：cordis.patch.yml 追加 insert 条目 ──
+ *
+ * patch 是 YAML 顶层数组，DSH 启动时把 insert 里的插件项合并进 profile 树。
+ * 不预解析整份 YAML：文件里可能有 !!js 表达式、多行注释、别的插件条目，
+ * 只要在末尾追加一个合法的列表项即可；识别用固定标记（id: aab / 插件名）。
+ */
+function applyDsh({ dryRun }) {
+  const file = HOSTS.dsh.config;
+  const { command, args } = commandFor();
+
+  if (dshPatchHasAab(file)) {
+    // 已有条目：路径仍是当前这份代码就跳过；内容不同则不动它，交给用户判断
+    const text = fs.readFileSync(file, "utf8");
+    const same = text.includes(command) && text.includes(args[0]);
+    return same
+      ? { ok: true, msg: tr("install.m.current", { file }) }
+      : { ok: false, msg: tr("install.m.dshConflict", { file }) };
+  }
+
+  const block = [
+    "- insert:",
+    "    - name: '@deepseek-ai/dsh-mcp-client'",
+    "      id: aab",
+    "      config:",
+    "        serverName: aab",
+    "        transport: stdio",
+    `        command: ${JSON.stringify(command)}`,
+    "        args:",
+    ...args.map((a) => `          - ${JSON.stringify(a)}`),
+  ].join("\n");
+
+  const exists = fs.existsSync(file);
+  if (!exists) {
+    if (dryRun) return { ok: true, msg: tr("install.m.planDsh", { file }) };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${block}\n`);
+    return { ok: true, msg: tr("install.m.dshDone", { file, bak: "" }) };
+  }
+
+  const prev = fs.readFileSync(file, "utf8");
+  // 只有空数组 / 空白时追加会拼出非法 YAML（[] 后面不能再跟 block 序列），直接换掉 []
+  const meaningful = prev.replace(/^[ \t]*#.*$/gm, "").trim();
+  if (meaningful === "[]") {
+    if (dryRun) return { ok: true, msg: tr("install.m.planDsh", { file }) };
+    const bak = backup(file);
+    fs.writeFileSync(file, prev.replace(/^[ \t]*\[\][ \t]*$/m, `${block}\n`));
+    return { ok: true, msg: tr("install.m.dshDone", { file, bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "" }) };
+  }
+
+  if (dryRun) return { ok: true, msg: tr("install.m.planDsh", { file }) };
+  const bak = backup(file);
+  const next = `${prev.trimEnd()}\n\n${block}\n`;
+  fs.writeFileSync(file, next);
+  return { ok: true, msg: tr("install.m.dshDone", { file, bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "" }) };
+}
+
 /* ── Codex：TOML 段落 upsert ── */
 function applyCodex({ dryRun }) {
   const file = HOSTS.codex.config;
@@ -256,7 +312,7 @@ function applyClaude({ dryRun }) {
   }
 }
 
-const APPLY = { easymint: applyEasymint, workbuddy: applyWorkbuddy, codex: applyCodex, claude: applyClaude };
+const APPLY = { easymint: applyEasymint, dsh: applyDsh, workbuddy: applyWorkbuddy, codex: applyCodex, claude: applyClaude };
 
 /**
  * @param {object} o
@@ -312,6 +368,8 @@ export function install({ targets, dryRun = false } = {}) {
     out.push(tr("install.devHint2"));
   }
   out.push(tr("install.next"));
+  // DSH 桌面版在进程启动时读 profile，新开会话没用，必须重启应用
+  if (chosen.includes("dsh")) out.push(tr("install.dshHint"));
   out.push(tr("install.rule"));
   return out.join("\n");
 }

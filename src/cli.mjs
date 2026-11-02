@@ -226,7 +226,7 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
   aab read     [--session <id>] [--turns 12-14] [--level N]
   aab grep     "关键词" [--agent ...] [--since ...] [--limit 8]
   aab mcp      stdio MCP server
-  aab install  [easymint|workbuddy|codex|claude] [--agent <同名逗号列表>] [--dry-run]
+  aab install  [easymint|dsh|workbuddy|codex|claude] [--agent <同名逗号列表>] [--dry-run]
                  只给指定的 / 本机确实装了的客户端注册 MCP；都不给就自动探测
                  aab install easymint 与 aab install --agent easymint 等价，二者不能同时给
   aab doctor                                                 诊断：能读到谁、哪个客户端还没挂上
@@ -261,7 +261,7 @@ Usage:
   aab read     [--session <id>] [--turns 12-14] [--level N]
   aab grep     "keyword" [--agent ...] [--since ...] [--limit 8]
   aab mcp      stdio MCP server
-  aab install  [easymint|workbuddy|codex|claude] [--agent <same list, comma separated>] [--dry-run]
+  aab install  [easymint|dsh|workbuddy|codex|claude] [--agent <same list, comma separated>] [--dry-run]
                  register MCP only with the named / actually installed clients; neither given = auto-detect
                  aab install <target> equals aab install --agent <target>; passing both is rejected
   aab doctor                                                 diagnose: what is readable, which host is missing

@@ -65,7 +65,7 @@ npx -y @tianemon/ai-agent-bridge doctor      # 能读到谁的会话、哪个客
 
 ## 安装
 
-`install` 只写本机确实存在的客户端配置，写入前备份，可重复执行。支持 WorkBuddy、Codex、Claude Code、EasyMint。
+`install` 只写本机确实存在的客户端配置，写入前备份，可重复执行。支持 WorkBuddy、Codex、Claude Code、EasyMint、DeepSeek Harness（desktop profile）。
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install --dry-run          # 只打印要写什么
@@ -134,6 +134,23 @@ claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-b
   }
 }
 ```
+
+**DeepSeek Harness** — `~/.dsh/profiles/desktop/cordis.patch.yml`（desktop profile 的用户覆写层，追加一项）
+
+```yaml
+- insert:
+    - name: '@deepseek-ai/dsh-mcp-client'
+      id: aab
+      config:
+        serverName: aab
+        transport: stdio
+        command: "/opt/homebrew/bin/node"
+        args:
+          - "/Users/you/dev/ai-agent-bridge/bin/aab.mjs"
+          - mcp
+```
+
+改完重启桌面版（profile 在进程启动时读取）。
 
 工具：`session_latest`、`session_list`、`session_read`、`session_grep`、`session_agents`。
 

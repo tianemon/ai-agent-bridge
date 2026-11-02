@@ -965,6 +965,88 @@ check("doctor 列出 EasyMint 宿主并识别注册状态", () => {
   return line.trim();
 });
 
+/* ── DeepSeek Harness（隔离 HOME；desktop profile 的 cordis.patch.yml） ── */
+const dshHome = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), `aab-dsh-${prefix}-`));
+const dshInstall = (home, args, env = {}) => {
+  const r = spawnSync(NODE, [SB, ...args], {
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, HOME: home, DSH_HOME: "", AAB_LANG: "zh", ...env },
+  });
+  // noCrash/has 用的是 run() 的形状，这里统一成 {out,err,code}
+  return { out: r.stdout || "", err: r.stderr || "", code: r.status };
+};
+
+check("install dsh 追加 insert 条目，保留原有条目且幂等", () => {
+  const home = dshHome("keep");
+  const dir = path.join(home, ".dsh", "profiles", "desktop");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "cordis.patch.yml");
+  const seed = "- id: ui-theme\n  name: '@deepseek-ai/dsh-client-ui-theme'\n  config:\n    preference: system\n";
+  fs.writeFileSync(file, seed);
+
+  const first = dshInstall(home, ["install", "dsh"]);
+  if (first.code !== 0) throw new Error(first.err.slice(0, 160));
+  const text = fs.readFileSync(file, "utf8");
+  if (!text.includes(seed.trim())) throw new Error("覆盖了原有条目");
+  if (!/id:\s*aab/.test(text)) throw new Error("没有写 aab 条目");
+  if (!/dsh-mcp-client/.test(text)) throw new Error("没有写 MCP client 插件");
+  if (!/aab\.mjs/.test(text)) throw new Error("没有写脚本路径");
+  const baks = () => fs.readdirSync(dir).filter((n) => n.includes(".bak-"));
+  if (!baks().length) throw new Error("改动前没有备份");
+
+  const snapshot = fs.readFileSync(file, "utf8");
+  const second = dshInstall(home, ["install", "dsh"]);
+  if (second.code !== 0) throw new Error(second.err.slice(0, 160));
+  if (fs.readFileSync(file, "utf8") !== snapshot) throw new Error("重复安装不是幂等");
+  if (baks().length !== 1) throw new Error("幂等时又写了一次备份");
+  return "追加 + 保留 + 备份 + 幂等";
+});
+
+check("install dsh 对已有指向别的路径的条目不动手", () => {
+  const home = dshHome("conflict");
+  const dir = path.join(home, ".dsh", "profiles", "desktop");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "cordis.patch.yml");
+  const seed =
+    "- insert:\n    - name: '@deepseek-ai/dsh-mcp-client'\n      id: aab\n      config:\n        serverName: aab\n        transport: stdio\n        command: \"/usr/bin/node\"\n        args:\n          - \"/opt/old/aab.mjs\"\n          - mcp\n";
+  fs.writeFileSync(file, seed);
+  const r = dshInstall(home, ["install", "dsh"]);
+  if (fs.readFileSync(file, "utf8") !== seed) throw new Error("已有条目被改动了");
+  has(r.out, "已有 aab 条目");
+  return "冲突时保持原样";
+});
+
+check("install dsh --dry-run 不写文件", () => {
+  const home = dshHome("dry");
+  const dir = path.join(home, ".dsh", "profiles", "desktop");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "cordis.patch.yml");
+  fs.writeFileSync(file, "- id: x\n");
+  const r = dshInstall(home, ["install", "dsh", "--dry-run"]);
+  noCrash(r);
+  if (fs.readFileSync(file, "utf8") !== "- id: x\n") throw new Error("dry-run 写了文件");
+  return "零写入";
+});
+
+check("doctor 列出 DeepSeek Harness 并识别注册状态", () => {
+  const home = dshHome("doc");
+  const dir = path.join(home, ".dsh", "profiles", "desktop");
+  fs.mkdirSync(dir, { recursive: true });
+  dshInstall(home, ["install", "dsh"]);
+  const r = spawnSync(NODE, [SB, "doctor"], {
+    encoding: "utf8",
+    timeout: 60000,
+    env: { ...process.env, HOME: home, DSH_HOME: "", AAB_LANG: "zh" },
+  });
+  const lines = (r.stdout || "").split("\n");
+  const start = lines.findIndex((l) => l.includes("■") && l.includes("宿主"));
+  const line = lines.slice(start).find((l) => l.includes("DeepSeek Harness"));
+  if (!line) throw new Error("宿主段没有 DeepSeek Harness");
+  if (!line.includes("已注册")) throw new Error(`状态不对：${line.trim()}`);
+  return line.trim();
+});
+
 /* ── MCP ── */
 function mcpRoundtrip(payloads, waitMs = 3500, cwd = os.homedir()) {
   return new Promise((resolve) => {

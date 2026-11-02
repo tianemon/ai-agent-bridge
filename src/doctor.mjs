@@ -46,6 +46,12 @@ function staleEntry(host) {
       const p = scriptOf(readEasymintConfig(HOSTS.easymint.config)?.mcpServers?.[NAME]);
       return p ? !fs.existsSync(p) : false;
     }
+    if (host === "dsh") {
+      const text = fs.readFileSync(HOSTS.dsh.config, "utf8");
+      // patch 是 YAML：aab 的脚本路径在 args 列表里，可能带双引号
+      const m = text.match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
+      return m ? !fs.existsSync(m[1]) : false;
+    }
     if (host === "codex") {
       const text = fs.readFileSync(HOSTS.codex.config, "utf8");
       const i = text.indexOf(`[mcp_servers.${NAME}]`);

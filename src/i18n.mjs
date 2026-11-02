@@ -119,6 +119,10 @@ const DICT = {
     "install.m.claudePlan": "将执行 claude mcp add --scope user {name} …",
     "install.m.claudeDone": "已注册（scope=user）",
     "install.m.claudeFail": "注册失败：{err}",
+    "install.m.planDsh": "将向 {file} 追加 aab insert 条目",
+    "install.m.dshDone": "已写入 {file}{bak}",
+    "install.m.dshConflict": "{file} 已有 aab 条目但指向其它路径，未改动（手动删掉旧条目后重试）",
+    "install.dshHint": "DeepSeek Harness 桌面版：重启应用后生效（新开会话不会重新加载 profile）。",
 
     "cli.unknownCmd": "未知命令 {cmd}",
     "cli.badAgent": "不支持的工具「{a}」，可选：{list}（或 auto）",
@@ -258,6 +262,10 @@ const DICT = {
     "install.m.claudePlan": "would run claude mcp add --scope user {name} …",
     "install.m.claudeDone": "registered (scope=user)",
     "install.m.claudeFail": "registration failed: {err}",
+    "install.m.planDsh": "would append the aab insert entry to {file}",
+    "install.m.dshDone": "wrote {file}{bak}",
+    "install.m.dshConflict": "{file} already has an aab entry pointing at a different path; left untouched (remove the old entry and reinstall)",
+    "install.dshHint": "DeepSeek Harness desktop: restart the app for the profile to reload (a new session is not enough).",
 
     "cli.unknownCmd": "unknown command {cmd}",
     "cli.badAgent": "unsupported tool \"{a}\", available: {list} (or auto)",

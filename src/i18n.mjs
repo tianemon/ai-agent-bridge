@@ -82,6 +82,8 @@ const DICT = {
     "doc.st.trusted": "已信任（{time}）",
     "doc.st.untrusted": "未安装，不处理",
     "doc.st.profiles": "{ok}/{total} 个 profile 已注册",
+    "doc.adapter.ok": "最新会话可解析",
+    "doc.adapter.suspect": "⚠ 最新会话解析不出轮次（格式可能变了）",
     "doc.scopeHint": "（默认按 cwd 所在项目过滤；子目录会归到 git 根；不像项目目录时才全机）",
 
     "install.title": "aab 安装{dry}",
@@ -125,6 +127,7 @@ const DICT = {
     "install.m.dshCurrent": "已是当前配置：{profiles}",
     "install.m.dshConflict": "已有 aab 条目但指向其它路径，未改动：{profiles}",
     "install.m.dshNoProfile": "~/.dsh/profiles 下没有可写的 profile，跳过",
+    "install.m.dshVerifyFail": "⚠ 写后校验未通过：{profiles}",
     "install.dshHint": "DeepSeek Harness：重启应用后生效（新开会话不会重新加载 profile）。",
 
     "cli.unknownCmd": "未知命令 {cmd}",
@@ -227,6 +230,8 @@ const DICT = {
     "doc.st.trusted": "trusted ({time})",
     "doc.st.untrusted": "not installed, skipped",
     "doc.st.profiles": "{ok}/{total} profiles registered",
+    "doc.adapter.ok": "latest session parses",
+    "doc.adapter.suspect": "⚠ latest session yields no turns (format may have changed)",
     "doc.scopeHint": "(filtered by the cwd's project by default; subdirectories resolve to the git root; whole machine only when cwd is not a project)",
 
     "install.title": "aab install{dry}",
@@ -271,6 +276,7 @@ const DICT = {
     "install.m.dshCurrent": "already up to date: {profiles}",
     "install.m.dshConflict": "existing aab entry points at a different path, left untouched: {profiles}",
     "install.m.dshNoProfile": "no writable profile under ~/.dsh/profiles, skipped",
+    "install.m.dshVerifyFail": "⚠ post-write verification failed: {profiles}",
     "install.dshHint": "DeepSeek Harness: restart the app for profiles to reload (a new session is not enough).",
 
     "cli.unknownCmd": "unknown command {cmd}",

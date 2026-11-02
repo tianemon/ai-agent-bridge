@@ -73,7 +73,7 @@ function staleEntry(host) {
   return false;
 }
 
-export function doctor() {
+export async function doctor() {
   const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
   const lines = [tr("doc.runtime")];
   lines.push(`  node    ${process.version}  ${process.execPath}`);
@@ -106,7 +106,19 @@ export function doctor() {
     }
     const rows = indexAll(name);
     const latest = rows.reduce((m, r) => Math.max(m, r.mtimeMs || 0), 0);
-    lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✓ ${tr("doc.sessions", { n: rows.length, ago: ago(latest) })}`);
+    // 自检：把最近一个会话真正解析一遍，格式变了（版本升级）在这里就会露出来，而不是等用户读不到
+    let health = "";
+    if (rows.length) {
+      const newest = rows.reduce((a, b) => ((b.mtimeMs || 0) > (a.mtimeMs || 0) ? b : a));
+      try {
+        health = (await getAgent(name).parse(newest.files))?.turns?.length
+          ? tr("doc.adapter.ok")
+          : tr("doc.adapter.suspect");
+      } catch {
+        health = tr("doc.adapter.suspect");
+      }
+    }
+    lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✓ ${tr("doc.sessions", { n: rows.length, ago: ago(latest) })}${health ? " · " + health : ""}`);
     lines.push(`               ${root}`);
   }
   lines.push("");

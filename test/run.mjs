@@ -809,6 +809,14 @@ check("doctor 列出全部读取源", () => {
   return "三家都在";
 });
 
+check("doctor 对最近会话做解析自检", () => {
+  const r = run(["doctor"]);
+  noCrash(r);
+  // 本机有会话时，能读那一节应带「可解析 / 解析不出轮次」标记
+  if (!/可解析|解析不出轮次/.test(r.out)) throw new Error("自检标记没有出现在输出里");
+  return "解析自检标记存在";
+});
+
 check("install --dry-run 不写任何文件", () => {
   const wb = path.join(os.homedir(), ".workbuddy", "mcp.json");
   const cx = path.join(os.homedir(), ".codex", "config.toml");
@@ -1042,6 +1050,16 @@ check("install dsh --dry-run 不写文件", () => {
   noCrash(r);
   if (fs.readFileSync(file, "utf8") !== "- id: x\n") throw new Error("dry-run 写了文件");
   return "零写入";
+});
+
+check("install dsh 写后自检不误报", () => {
+  const home = dshHome("verify");
+  mkProfile(home, "desktop", "- id: a\n");
+  mkProfile(home, "web", "- id: b\n");
+  const r = dshInstall(home, ["install", "dsh"]);
+  if (r.code !== 0) throw new Error(r.err.slice(0, 160));
+  if (r.out.includes("校验未通过")) throw new Error(`写后校验误报：${r.out.slice(0, 200)}`);
+  return "两个 profile 写完无校验告警";
 });
 
 check("doctor 列出 DeepSeek Harness 并报 profile 覆盖数", () => {

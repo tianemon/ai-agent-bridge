@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, dshPatchPaths, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, dshPatchPaths, dshHome, NAME, LEGACY } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 
 const TOML_HEADER = `[mcp_servers.${NAME}]`;
@@ -171,6 +171,51 @@ function applyEasymint({ dryRun }) {
  * 只要在末尾追加一个合法的列表项即可；识别用固定标记（id: aab / 插件名）。
  * 全端：profiles 下每个 profile 各写一份（desktop/web/tui…）；已有条目指向别的路径时不动手。
  */
+
+let cachedDshCli;
+/** DSH CLI 打包在应用里，多数机器不在 PATH；两个候选都试，找不到就返回 null */
+function dshCliPath() {
+  if (cachedDshCli !== undefined) return cachedDshCli;
+  const candidates = ["dsh", "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh"];
+  for (const c of candidates) {
+    try {
+      execFileSync(c, ["--version"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
+      cachedDshCli = c;
+      return c;
+    } catch {
+      /* 试下一个 */
+    }
+  }
+  cachedDshCli = null;
+  return null;
+}
+
+/**
+ * 写后自检：
+ *   - 有 DSH CLI 且 profile 不是 desktop → 让 DSH 自己 dump-config，确认它解析得出 aab 条目
+ *   - desktop 由 Electron 独占，CLI 拒绝启动 → 退回结构回读（aab 条目可识别）
+ *   - 没有 CLI → 结构回读
+ */
+function verifyDshProfile(file) {
+  if (!dshPatchHasAab(file)) return false;
+  const name = path.basename(path.dirname(file));
+  const cli = dshCliPath();
+  if (cli && name !== "desktop") {
+    try {
+      const out = execFileSync(cli, ["--profile", name, "--dump-config"], {
+        encoding: "utf8",
+        timeout: 15000,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return out.includes("id: aab");
+    } catch {
+      // dump 起不来多半是 profile 本身不完整（新建/临时 HOME），不代表写坏的 YAML；退回结构回读
+      return true;
+    }
+  }
+  return true;
+}
+
 function writeDshPatch(file, block) {
   const exists = fs.existsSync(file);
   if (!exists) {
@@ -226,11 +271,15 @@ function applyDsh({ dryRun }) {
     return { ok: true, msg: tr("install.m.planDsh", { profiles: (written.length ? written : files.map(profileOf)).join(tr("list.sep")) }) };
   }
 
+  // 写后自检：能 dump 的让 DSH 自己确认，desktop 退回结构回读
+  const broken = written.filter((name) => !verifyDshProfile(path.join(dshHome(), "profiles", name, "cordis.patch.yml")));
+
   const parts = [];
   if (written.length) parts.push(tr("install.m.dshDone", { profiles: written.join(tr("list.sep")) }));
   if (current.length) parts.push(tr("install.m.dshCurrent", { profiles: current.join(tr("list.sep")) }));
   if (conflicts.length) parts.push(tr("install.m.dshConflict", { profiles: conflicts.join(tr("list.sep")) }));
-  return { ok: conflicts.length === 0, msg: parts.join(tr("list.sep")) };
+  if (broken.length) parts.push(tr("install.m.dshVerifyFail", { profiles: broken.join(tr("list.sep")) }));
+  return { ok: conflicts.length === 0 && broken.length === 0, msg: parts.join(tr("list.sep")) };
 }
 
 /* ── Codex：TOML 段落 upsert ── */

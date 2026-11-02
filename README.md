@@ -4,8 +4,15 @@
 
 读取另一个 AI 编码工具的会话：**先给最新结论，不够再逐层展开**。
 
-支持 Codex、Claude Code、WorkBuddy、CodeBuddy、EasyMint、DeepSeek Harness。会话数据只读；唯一写入的是各客户端的
-MCP 配置，由 `install` 完成，可用 `--dry-run` 预览。
+两个概念分开看：
+
+- **能读谁**：已适配会话格式的工具 — Codex、Claude Code、WorkBuddy、CodeBuddy、EasyMint、DeepSeek Harness
+- **能装谁**：任何支持 MCP 的客户端都能挂 aab；aab 能自动写配置的是 EasyMint、DeepSeek Harness（全部 profile）、
+  WorkBuddy、Codex、Claude Code，**其它客户端自己装**（见下方「安装」）
+
+典型场景：A 工具的额度用完了，让 B 读 A 的最后状态、由 **B 自己接着干**——不要去 resume A。
+
+会话数据只读；唯一写入的是各客户端的 MCP 配置，由 `install` 完成，可用 `--dry-run` 预览。
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install     # 探测本机已装的客户端并写入 MCP 配置
@@ -65,7 +72,27 @@ npx -y @tianemon/ai-agent-bridge doctor      # 能读到谁的会话、哪个客
 
 ## 安装
 
-`install` 只写本机确实存在的客户端配置，写入前备份，可重复执行。支持 WorkBuddy、Codex、Claude Code、EasyMint、DeepSeek Harness（desktop profile）。
+### 给 agent 的安装方式（推荐）
+
+把本仓库地址直接贴给任意编码 agent，让它按这一节执行：
+
+> 读 https://github.com/tianemon/ai-agent-bridge 的「安装」一节：把 aab 注册成你所在客户端的 MCP server，
+> 然后跑 `aab doctor` 验证。
+
+agent 会自己完成：
+
+1. `npx -y @tianemon/ai-agent-bridge install` — aab 自动写**已适配**的客户端（EasyMint、DeepSeek Harness 全部
+   profile、WorkBuddy、Codex、Claude Code）
+2. `aab doctor` — 看「能装」一节，确认自己所在的客户端是否已注册
+3. **没适配自己的工具** → 自己把 stdio MCP 写进本工具的配置目录（agent 知道自己是哪个工具）：
+   `command = <node 绝对路径>`，`args = ["<aab 安装路径>/bin/aab.mjs", "mcp"]`，然后重启它
+
+`aab prompt` 打印同一份指令（中英跟随系统语言），可直接粘给 agent。
+
+### 手动安装
+
+`install` 只写本机确实存在的客户端配置，写入前备份，可重复执行。能自动写的宿主：EasyMint、DeepSeek
+Harness（全部 profile）、WorkBuddy、Codex、Claude Code。
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install --dry-run          # 只打印要写什么
@@ -84,6 +111,28 @@ aab install          # 让各家配置指向新路径
 ```
 
 `aab doctor` 的 `mode` 行显示当前运行形态：`npm 全局安装` / `开发目录` / `npx 缓存`。
+
+### 客户端没被适配怎么办
+
+任何支持 MCP 的客户端都能用 aab，只是写配置这一步得自己来。确认本机的 aab 安装路径：
+
+```bash
+aab doctor          # script 一行就是 aab.mjs 的绝对路径
+```
+
+然后在该客户端的 MCP 设置里加一条 stdio server：
+
+```json
+{
+  "aab": {
+    "command": "<node 绝对路径>",
+    "args": ["<aab 安装路径>/bin/aab.mjs", "mcp"]
+  }
+}
+```
+
+DSH 这类按 profile 分目录的客户端，把配置写进对应 profile 的用户覆写层（DSH 是每个
+`~/.dsh/profiles/<name>/cordis.patch.yml`）。
 
 ## 作为 MCP server
 
@@ -135,7 +184,7 @@ claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-b
 }
 ```
 
-**DeepSeek Harness** — `~/.dsh/profiles/desktop/cordis.patch.yml`（desktop profile 的用户覆写层，追加一项）
+**DeepSeek Harness** — 每个 profile 的用户覆写层 `~/.dsh/profiles/<name>/cordis.patch.yml`（desktop / web / tui 各一份，追加一项）
 
 ```yaml
 - insert:

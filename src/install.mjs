@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, dshPatchPaths, NAME, LEGACY } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 
 const TOML_HEADER = `[mcp_servers.${NAME}]`;
@@ -164,25 +164,38 @@ function applyEasymint({ dryRun }) {
   };
 }
 
-/* ── DeepSeek Harness：cordis.patch.yml 追加 insert 条目 ──
+/* ── DeepSeek Harness：每个 profile 的 cordis.patch.yml 追加 insert 条目 ──
  *
  * patch 是 YAML 顶层数组，DSH 启动时把 insert 里的插件项合并进 profile 树。
  * 不预解析整份 YAML：文件里可能有 !!js 表达式、多行注释、别的插件条目，
  * 只要在末尾追加一个合法的列表项即可；识别用固定标记（id: aab / 插件名）。
+ * 全端：profiles 下每个 profile 各写一份（desktop/web/tui…）；已有条目指向别的路径时不动手。
  */
-function applyDsh({ dryRun }) {
-  const file = HOSTS.dsh.config;
-  const { command, args } = commandFor();
-
-  if (dshPatchHasAab(file)) {
-    // 已有条目：路径仍是当前这份代码就跳过；内容不同则不动它，交给用户判断
-    const text = fs.readFileSync(file, "utf8");
-    const same = text.includes(command) && text.includes(args[0]);
-    return same
-      ? { ok: true, msg: tr("install.m.current", { file }) }
-      : { ok: false, msg: tr("install.m.dshConflict", { file }) };
+function writeDshPatch(file, block) {
+  const exists = fs.existsSync(file);
+  if (!exists) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${block}\n`);
+    return "";
   }
+  const prev = fs.readFileSync(file, "utf8");
+  // 只有空数组 / 空白时追加会拼出非法 YAML（[] 后面不能再跟 block 序列），直接换掉 []
+  const meaningful = prev.replace(/^[ \t]*#.*$/gm, "").trim();
+  const bak = backup(file);
+  if (meaningful === "[]") {
+    fs.writeFileSync(file, prev.replace(/^[ \t]*\[\][ \t]*$/m, `${block}\n`));
+  } else {
+    fs.writeFileSync(file, `${prev.trimEnd()}\n\n${block}\n`);
+  }
+  return bak ? tr("install.m.bak", { name: path.basename(bak) }) : "";
+}
 
+function applyDsh({ dryRun }) {
+  const files = dshPatchPaths();
+  if (!files.length) return { ok: false, msg: tr("install.m.dshNoProfile") };
+
+  const profileOf = (file) => path.basename(path.dirname(file));
+  const { command, args } = commandFor();
   const block = [
     "- insert:",
     "    - name: '@deepseek-ai/dsh-mcp-client'",
@@ -195,29 +208,29 @@ function applyDsh({ dryRun }) {
     ...args.map((a) => `          - ${JSON.stringify(a)}`),
   ].join("\n");
 
-  const exists = fs.existsSync(file);
-  if (!exists) {
-    if (dryRun) return { ok: true, msg: tr("install.m.planDsh", { file }) };
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, `${block}\n`);
-    return { ok: true, msg: tr("install.m.dshDone", { file, bak: "" }) };
+  const written = [];
+  const current = [];
+  const conflicts = [];
+  for (const file of files) {
+    if (dshPatchHasAab(file)) {
+      // 已有条目：只要它指向的 aab.mjs 还在，就算"可用"——手写配置的 command 不必与本机当前 node 完全一致
+      const found = fs.readFileSync(file, "utf8").match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
+      (found && fs.existsSync(found[1]) ? current : conflicts).push(profileOf(file));
+      continue;
+    }
+    written.push(profileOf(file));
+    if (!dryRun) writeDshPatch(file, block);
   }
 
-  const prev = fs.readFileSync(file, "utf8");
-  // 只有空数组 / 空白时追加会拼出非法 YAML（[] 后面不能再跟 block 序列），直接换掉 []
-  const meaningful = prev.replace(/^[ \t]*#.*$/gm, "").trim();
-  if (meaningful === "[]") {
-    if (dryRun) return { ok: true, msg: tr("install.m.planDsh", { file }) };
-    const bak = backup(file);
-    fs.writeFileSync(file, prev.replace(/^[ \t]*\[\][ \t]*$/m, `${block}\n`));
-    return { ok: true, msg: tr("install.m.dshDone", { file, bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "" }) };
+  if (dryRun) {
+    return { ok: true, msg: tr("install.m.planDsh", { profiles: (written.length ? written : files.map(profileOf)).join(tr("list.sep")) }) };
   }
 
-  if (dryRun) return { ok: true, msg: tr("install.m.planDsh", { file }) };
-  const bak = backup(file);
-  const next = `${prev.trimEnd()}\n\n${block}\n`;
-  fs.writeFileSync(file, next);
-  return { ok: true, msg: tr("install.m.dshDone", { file, bak: bak ? tr("install.m.bak", { name: path.basename(bak) }) : "" }) };
+  const parts = [];
+  if (written.length) parts.push(tr("install.m.dshDone", { profiles: written.join(tr("list.sep")) }));
+  if (current.length) parts.push(tr("install.m.dshCurrent", { profiles: current.join(tr("list.sep")) }));
+  if (conflicts.length) parts.push(tr("install.m.dshConflict", { profiles: conflicts.join(tr("list.sep")) }));
+  return { ok: conflicts.length === 0, msg: parts.join(tr("list.sep")) };
 }
 
 /* ── Codex：TOML 段落 upsert ── */

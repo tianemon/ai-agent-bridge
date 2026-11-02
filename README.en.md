@@ -2,8 +2,16 @@
 
 Read another AI coding tool's session: **newest conclusion first, escalate only as needed**.
 
-Supports Codex, Claude Code, WorkBuddy, CodeBuddy, EasyMint and DeepSeek Harness. Session data is read-only; the only writes
-are the MCP client configs, made by `install` and previewable with `--dry-run`.
+Two separate concepts:
+
+- **readable** (adapted session formats): Codex, Claude Code, WorkBuddy, CodeBuddy, EasyMint, DeepSeek Harness
+- **installable** (hosts aab can configure): any MCP-capable client can run aab; aab writes the config for
+  EasyMint, DeepSeek Harness (all profiles), WorkBuddy, Codex, Claude Code — **everything else installs itself**
+  (see "Install")
+
+Typical use: tool A runs out of quota; let B read A's last state and **carry on itself** — do not resume A.
+
+Session data is read-only; the only writes are the MCP client configs, made by `install` and previewable with `--dry-run`.
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install     # detect installed clients and write the MCP config
@@ -65,8 +73,29 @@ explicitly and appends the most recent turn that has one, with its turn number a
 
 ## Install
 
+### Agent-driven install (recommended)
+
+Give any coding agent this repository URL and tell it to follow this section:
+
+> Read https://github.com/tianemon/ai-agent-bridge "Install": register aab as your client's MCP server,
+> then run `aab doctor`.
+
+The agent does the rest:
+
+1. `npx -y @tianemon/ai-agent-bridge install` — aab writes the config for the clients **it has adapted**
+   (EasyMint, DeepSeek Harness all profiles, WorkBuddy, Codex, Claude Code)
+2. `aab doctor` — read the "installable" section to confirm its own client is registered
+3. **if its tool is not adapted** → add the stdio MCP entry to that tool's own config directory (the agent
+   knows what tool it is): `command = <absolute node path>`,
+   `args = ["<aab install path>/bin/aab.mjs", "mcp"]`, then restart it
+
+`aab prompt` prints the same instructions (in English or Chinese, following the system locale) and can be
+pasted straight to an agent.
+
+### Manual install
+
 `install` writes configuration only for clients actually present on the machine, backs up before writing, and
-is idempotent. Supported hosts: WorkBuddy, Codex, Claude Code, EasyMint, DeepSeek Harness (desktop profile).
+is idempotent. Auto-written hosts: EasyMint, DeepSeek Harness (all profiles), WorkBuddy, Codex, Claude Code.
 
 ```bash
 npx -y @tianemon/ai-agent-bridge install --dry-run              # print what would be written
@@ -85,6 +114,28 @@ aab install          # point the client configs at the new path
 ```
 
 The `mode` line of `aab doctor` reports the current form: `npm global install` / `checkout` / `npx cache`.
+
+### If your client is not adapted
+
+Any MCP-capable client can use aab; only the config-writing step is manual. Find the local aab path:
+
+```bash
+aab doctor          # the "script" line is the absolute path of aab.mjs
+```
+
+Then add a stdio server in that client's MCP settings:
+
+```json
+{
+  "aab": {
+    "command": "<absolute node path>",
+    "args": ["<aab install path>/bin/aab.mjs", "mcp"]
+  }
+}
+```
+
+For profile-based clients such as DSH, write it into the profile's user override layer (for DSH, each
+`~/.dsh/profiles/<name>/cordis.patch.yml`).
 
 ## As an MCP server
 
@@ -138,8 +189,8 @@ claude mcp add --scope user aab /opt/homebrew/bin/node /Users/you/dev/ai-agent-b
 }
 ```
 
-**DeepSeek Harness** — `~/.dsh/profiles/desktop/cordis.patch.yml` (the desktop profile's user override layer;
-append one entry)
+**DeepSeek Harness** — each profile's user override layer `~/.dsh/profiles/<name>/cordis.patch.yml`
+(desktop / web / tui each get one entry; append it)
 
 ```yaml
 - insert:

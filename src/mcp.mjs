@@ -17,7 +17,23 @@ export { VERSION };
 /** 我们实际实现的协议版本；客户端要别的就回这个，不谎称支持 */
 const PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-30"];
 
-const TOOL_LIST = "codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy";
+const TOOL_LIST = "codex / Claude Code / WorkBuddy / EasyMint / CodeBuddy / DeepSeek Harness";
+
+/** 当前 MCP 客户端自报的身份（initialize.clientInfo.name）；用来判断"aab 有没有适配它" */
+let clientIdentity = "";
+const ADAPTED_HOST = /easymint|workbuddy|codex|claude|codebuddy|dsh|deepseek/i;
+
+/** 未适配的客户端拿不到 aab install 的自动写入，只能自己装——在 instructions 里把这一步说清 */
+function instructions() {
+  if (!clientIdentity || ADAPTED_HOST.test(clientIdentity)) return INSTRUCTIONS;
+  return (
+    INSTRUCTIONS +
+    ` You are running inside "${clientIdentity}", which aab has no automatic installer for. ` +
+    "Add this MCP entry to that tool's own config directory and restart it: " +
+    'transport = stdio, command = <absolute node path>, args = ["<aab install path>/bin/aab.mjs", "mcp"]. ' +
+    "Full self-install steps: run `aab prompt` (or read the README's install section)."
+  );
+}
 
 /**
  * 随 initialize 一起下发的提示（MCP 规范里的 InitializeResult.instructions，规范原文：宿主可以把它
@@ -43,7 +59,10 @@ const INSTRUCTIONS = [
   "pass agent/since when the current session eats the limit). ",
   "Do not parse rollout-*.jsonl or session sqlite by hand — one thread can exceed 50 MB and will blow up ",
   "the context. If aab doctor reports WorkBuddy as untrusted, tell the user to click ",
-  "连接器 → 自定义连接器 → aab → 信任 (Connectors → Custom connectors → aab → Trust) — only a human can do that.",
+  "连接器 → 自定义连接器 → aab → 信任 (Connectors → Custom connectors → aab → Trust) — only a human can do that. ",
+  // 未适配的 MCP 客户端拿不到 aab install 的自动写入，这一句是通用兜底（clientInfo 已知时会再补具体提示）
+  "If you are running inside a client that aab has no installer for, add this stdio server to that tool's own ",
+  'config yourself: command = <absolute node path>, args = ["<aab install path>/bin/aab.mjs", "mcp"].',
 ].join("");
 
 const KNOWN_SCHEMA = {
@@ -232,6 +251,7 @@ export function serveMcp() {
 
     if (method === "initialize") {
       const asked = params?.protocolVersion;
+      if (params?.clientInfo?.name) clientIdentity = String(params.clientInfo.name);
       send({
         jsonrpc: "2.0",
         id,
@@ -239,7 +259,7 @@ export function serveMcp() {
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
           capabilities: { tools: {} },
           serverInfo: { name: "aab", version: VERSION },
-          instructions: INSTRUCTIONS,
+          instructions: instructions(),
         },
       });
       return;

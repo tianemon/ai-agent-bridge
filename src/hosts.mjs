@@ -32,8 +32,28 @@ export function dshHome() {
 /**
  * DSH 的 profile 是"启动模式的独立配置树"（web / desktop / tui…），
  * 每个 profile 的用户覆写层是 cordis.patch.yml。
- * 这里只认 desktop：它由 Electron 应用读写，web 等其它 profile 不代管。
+ * 全端覆盖：profiles 下每个带 cordis.yml / package.json 的目录都算一个 profile；
+ * profiles/node_modules 是依赖目录，不是 profile。
  */
+export function dshProfiles() {
+  const root = path.join(dshHome(), "profiles");
+  let entries;
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() && e.name !== "node_modules")
+    .map((e) => path.join(root, e.name))
+    .filter((dir) => ["cordis.yml", "cordis.patch.yml", "package.json"].some((f) => fs.existsSync(path.join(dir, f))));
+}
+
+/** 每个 profile 的 cordis.patch.yml；文件可能尚不存在，写入时创建 */
+export function dshPatchPaths() {
+  return dshProfiles().map((dir) => path.join(dir, "cordis.patch.yml"));
+}
+
 export function dshPatchPath(profile = "desktop") {
   return path.join(dshHome(), "profiles", profile, "cordis.patch.yml");
 }
@@ -73,16 +93,10 @@ export const HOSTS = {
     },
   },
   dsh: {
-    // 只认 desktop profile：DSH 桌面版由 Electron 管理，web/tui 等 profile 不代管
+    // 全端：profiles 下每个 profile 各写自己的 cordis.patch.yml
     label: "DeepSeek Harness",
-    get config() { return dshPatchPath("desktop"); },
-    detect: () => {
-      try {
-        return fs.statSync(path.join(dshHome(), "profiles", "desktop")).isDirectory();
-      } catch {
-        return false;
-      }
-    },
+    get config() { return dshPatchPaths()[0] || dshPatchPath("desktop"); },
+    detect: () => dshProfiles().length > 0,
   },
   workbuddy: {
     label: "WorkBuddy",
@@ -138,7 +152,9 @@ export function registered(host) {
     return !!readEasymintConfig(HOSTS.easymint.config)?.mcpServers?.[NAME];
   }
   if (host === "dsh") {
-    return dshPatchHasAab(HOSTS.dsh.config);
+    // 全部 profile 都注册才算注册；部分注册由 doctor 单独展示数量
+    const paths = dshPatchPaths();
+    return paths.length > 0 && paths.every((p) => dshPatchHasAab(p));
   }
   if (host === "codex") {
     try {

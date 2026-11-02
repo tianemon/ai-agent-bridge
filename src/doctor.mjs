@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
-import { HOSTS, detectHosts, registered, approvalState, trustStale, readEasymintConfig, NAME } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, trustStale, readEasymintConfig, dshPatchPaths, dshPatchHasAab, NAME } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 import { resolveNode, runtimeMode } from "./install.mjs";
 
@@ -47,10 +47,15 @@ function staleEntry(host) {
       return p ? !fs.existsSync(p) : false;
     }
     if (host === "dsh") {
-      const text = fs.readFileSync(HOSTS.dsh.config, "utf8");
-      // patch 是 YAML：aab 的脚本路径在 args 列表里，可能带双引号
-      const m = text.match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
-      return m ? !fs.existsSync(m[1]) : false;
+      // patch 是 YAML：aab 的脚本路径在 args 列表里，可能带双引号；任一 profile 指向已删除的文件就算坏
+      return dshPatchPaths().some((file) => {
+        try {
+          const m = fs.readFileSync(file, "utf8").match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
+          return m ? !fs.existsSync(m[1]) : false;
+        } catch {
+          return false;
+        }
+      });
     }
     if (host === "codex") {
       const text = fs.readFileSync(HOSTS.codex.config, "utf8");
@@ -114,12 +119,19 @@ export function doctor() {
       continue;
     }
     const reg = registered(name);
-    const bad = reg && staleEntry(name);
     let status;
-    if (reg === null) status = "? " + tr("doc.st.unknown");
-    else if (bad) status = "⚠ " + tr("doc.st.stale");
-    else if (!reg) status = "✗ " + tr("doc.st.missing");
-    else status = "✓ " + tr("doc.st.registered");
+    if (name === "dsh") {
+      // 全端：按 profile 报数量，部分注册不伪装成全绿
+      const paths = dshPatchPaths();
+      const ok = paths.filter((p) => dshPatchHasAab(p)).length;
+      status = staleEntry(name) ? "⚠ " + tr("doc.st.stale") : `${ok === paths.length ? "✓" : "✗"} ${tr("doc.st.profiles", { ok, total: paths.length })}`;
+    } else {
+      const bad = reg && staleEntry(name);
+      if (reg === null) status = "? " + tr("doc.st.unknown");
+      else if (bad) status = "⚠ " + tr("doc.st.stale");
+      else if (!reg) status = "✗ " + tr("doc.st.missing");
+      else status = "✓ " + tr("doc.st.registered");
+    }
 
     // WorkBuddy 还有一道人工闸：写进配置之后要点一次信任，MCP 才会真的加载
     if (reg && name === "workbuddy") {

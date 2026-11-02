@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
-import { dropTomlSection, runtimeMode } from "../src/install.mjs";
+import { dropTomlSection, runtimeMode, verifyDshProfile } from "../src/install.mjs";
 import { validateDict } from "../src/i18n.mjs";
 import { grepSessions } from "../src/grep.mjs";
 import { latestTitlesFromIndex, userTurnOf as codexUserTurn } from "../src/agents/codex.mjs";
@@ -812,9 +812,10 @@ check("doctor 列出全部读取源", () => {
 check("doctor 对最近会话做解析自检", () => {
   const r = run(["doctor"]);
   noCrash(r);
-  // 本机有会话时，能读那一节应带「可解析 / 解析不出轮次」标记
-  if (!/可解析|解析不出轮次/.test(r.out)) throw new Error("自检标记没有出现在输出里");
-  return "解析自检标记存在";
+  // 必须至少一家显示「可解析」：只断言标记存在的话，parse 永远失败也仍会输出「解析不出轮次」
+  const ok = (r.out.match(/可解析/g) || []).length;
+  if (!ok) throw new Error("没有任何来源显示「可解析」——自检可能整体失效");
+  return `${ok} 家自检可解析`;
 });
 
 check("install --dry-run 不写任何文件", () => {
@@ -1030,17 +1031,58 @@ check("install dsh 写全部 profile，保留原有条目且幂等", () => {
   return "desktop + web 都写、node_modules 跳过、幂等";
 });
 
-check("install dsh 冲突 profile 不动手，其余 profile 照写", () => {
+check("install dsh 无法识别的已有条目不动手，其余 profile 照写", () => {
   const home = dshHome("conflict");
+  // 指向包名而不是 aab.mjs 路径：aab 无法判断它是否失效，保持原样
   const seed =
-    "- insert:\n    - name: '@deepseek-ai/dsh-mcp-client'\n      id: aab\n      config:\n        serverName: aab\n        transport: stdio\n        command: \"/usr/bin/node\"\n        args:\n          - \"/opt/old/aab.mjs\"\n          - mcp\n";
+    "- insert:\n    - name: '@deepseek-ai/dsh-mcp-client'\n      id: aab\n      config:\n        serverName: aab\n        transport: stdio\n        command: \"npx\"\n        args:\n          - \"-y\"\n          - \"@tianemon/ai-agent-bridge\"\n          - \"mcp\"\n";
   const desktop = mkProfile(home, "desktop", seed);
   const web = mkProfile(home, "web", "- id: x\n");
   const r = dshInstall(home, ["install", "dsh"]);
-  if (fs.readFileSync(desktop, "utf8") !== seed) throw new Error("冲突 profile 被改动了");
+  if (fs.readFileSync(desktop, "utf8") !== seed) throw new Error("无法识别的条目被改动了");
   if (!/id:\s*aab/.test(fs.readFileSync(web, "utf8"))) throw new Error("其它 profile 没写");
-  has(r.out, "已有 aab 条目");
-  return "冲突保留 + 其余照写";
+  has(r.out, "已是当前配置");
+  return "无法识别保持原样（按已注册处理）+ 其余照写";
+});
+
+check("install dsh 替换失效路径，条目数不变", () => {
+  const home = dshHome("stale");
+  const seed =
+    "- insert:\n    - name: '@deepseek-ai/dsh-mcp-client'\n      id: aab\n      config:\n        serverName: aab\n        transport: stdio\n        command: \"/usr/bin/node\"\n        args:\n          - \"/opt/old/aab.mjs\"\n          - mcp\n";
+  const file = mkProfile(home, "desktop", seed);
+  const r = dshInstall(home, ["install", "dsh"]);
+  const text = fs.readFileSync(file, "utf8");
+  if (text.includes("/opt/old/aab.mjs")) throw new Error("失效路径没有被替换");
+  if (!text.includes("aab.mjs")) throw new Error("新路径没写进去");
+  if ((text.match(/id:\s*aab/g) || []).length !== 1) throw new Error("条目数不是 1（重复追加）");
+  has(r.out, "已替换失效路径");
+  return "旧路径替换 + 条目数不变";
+});
+
+check("install dsh 识别 DSH 重写后的折行路径", () => {
+  const home = dshHome("folded");
+  // DSH 用 YAML 序列化器重写长字符串时折行：...aab.m\ + 换行 + 缩进 + js"
+  const fake = path.join(home, "aab.mjs");
+  fs.writeFileSync(fake, "// placeholder\n");
+  const folded = fake.slice(0, -2) + "\\\n            js";
+  const seed = `- insert:\n    - name: '@deepseek-ai/dsh-mcp-client'\n      id: aab\n      config:\n        serverName: aab\n        transport: stdio\n        command: "/usr/bin/node"\n        args:\n          - "${folded}"\n          - "mcp"\n`;
+  const file = mkProfile(home, "desktop", seed);
+  const r = dshInstall(home, ["install", "dsh"]);
+  if (fs.readFileSync(file, "utf8") !== seed) throw new Error("折行条目被误改");
+  has(r.out, "已是当前配置");
+  return "折行路径识别为已注册，不误报冲突";
+});
+
+check("verifyDshProfile 结构判断两个方向都覆盖", () => {
+  const home = dshHome("verify-unit");
+  const dir = path.join(home, ".dsh", "profiles", "web");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "cordis.patch.yml");
+  fs.writeFileSync(file, "- id: x\n");
+  if (verifyDshProfile(file) !== false) throw new Error("没有 aab 条目却通过校验");
+  fs.writeFileSync(file, "- insert:\n    - name: '@deepseek-ai/dsh-mcp-client'\n      id: aab\n      config:\n        serverName: aab\n");
+  if (verifyDshProfile(file) !== true) throw new Error("有 aab 条目却没过校验");
+  return "无 aab → false；有 aab → true";
 });
 
 check("install dsh --dry-run 不写文件", () => {

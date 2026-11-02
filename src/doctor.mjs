@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
-import { HOSTS, detectHosts, registered, approvalState, trustStale, readEasymintConfig, dshPatchPaths, dshPatchHasAab, NAME } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, trustStale, readEasymintConfig, dshPatchPaths, dshPatchHasAab, aabScriptIn, NAME } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 import { resolveNode, runtimeMode } from "./install.mjs";
 
@@ -47,11 +47,11 @@ function staleEntry(host) {
       return p ? !fs.existsSync(p) : false;
     }
     if (host === "dsh") {
-      // patch 是 YAML：aab 的脚本路径在 args 列表里，可能带双引号；任一 profile 指向已删除的文件就算坏
+      // patch 是 YAML：aab 的脚本路径在 args 列表里，DSH 重写后可能折行（见 aabScriptIn）
       return dshPatchPaths().some((file) => {
         try {
-          const m = fs.readFileSync(file, "utf8").match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
-          return m ? !fs.existsSync(m[1]) : false;
+          const script = aabScriptIn(fs.readFileSync(file, "utf8"));
+          return script ? !fs.existsSync(script) : false;
         } catch {
           return false;
         }

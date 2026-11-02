@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, dshPatchPaths, dshHome, NAME, LEGACY } from "./hosts.mjs";
+import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, dshPatchPaths, dshHome, aabScriptIn, NAME, LEGACY } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
 
 const TOML_HEADER = `[mcp_servers.${NAME}]`;
@@ -196,7 +196,7 @@ function dshCliPath() {
  *   - desktop 由 Electron 独占，CLI 拒绝启动 → 退回结构回读（aab 条目可识别）
  *   - 没有 CLI → 结构回读
  */
-function verifyDshProfile(file) {
+export function verifyDshProfile(file) {
   if (!dshPatchHasAab(file)) return false;
   const name = path.basename(path.dirname(file));
   const cli = dshCliPath();
@@ -237,7 +237,7 @@ function writeDshPatch(file, block) {
 
 function applyDsh({ dryRun }) {
   const files = dshPatchPaths();
-  if (!files.length) return { ok: false, msg: tr("install.m.dshNoProfile") };
+  if (!files.length) return { ok: false, msg: tr("install.m.dshNoProfile", { dir: path.join(dshHome(), "profiles") }) };
 
   const profileOf = (file) => path.basename(path.dirname(file));
   const { command, args } = commandFor();
@@ -255,12 +255,32 @@ function applyDsh({ dryRun }) {
 
   const written = [];
   const current = [];
+  const fixed = [];
   const conflicts = [];
   for (const file of files) {
     if (dshPatchHasAab(file)) {
-      // 已有条目：只要它指向的 aab.mjs 还在，就算"可用"——手写配置的 command 不必与本机当前 node 完全一致
-      const found = fs.readFileSync(file, "utf8").match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
-      (found && fs.existsSync(found[1]) ? current : conflicts).push(profileOf(file));
+      // 已有条目：能提取到脚本路径且文件存在就算"可用"（含 DSH 重写后的折行形式）。
+      // 路径已失效且原文未折行时把旧路径替换成当前路径；折行且失效无法安全替换，交回用户处理。
+      const text = fs.readFileSync(file, "utf8");
+      const script = aabScriptIn(text);
+      if (!script) {
+        // 不是 aab 写的地址形式（如 npx 包名）：不归这里判断，保持原样
+        current.push(profileOf(file));
+        continue;
+      }
+      if (fs.existsSync(script)) {
+        current.push(profileOf(file));
+        continue;
+      }
+      if (!text.includes(script)) {
+        conflicts.push(profileOf(file));
+        continue;
+      }
+      if (!dryRun) {
+        backup(file);
+        fs.writeFileSync(file, text.replaceAll(script, args[0]));
+      }
+      fixed.push(profileOf(file));
       continue;
     }
     written.push(profileOf(file));
@@ -272,10 +292,11 @@ function applyDsh({ dryRun }) {
   }
 
   // 写后自检：能 dump 的让 DSH 自己确认，desktop 退回结构回读
-  const broken = written.filter((name) => !verifyDshProfile(path.join(dshHome(), "profiles", name, "cordis.patch.yml")));
+  const broken = [...written, ...fixed].filter((name) => !verifyDshProfile(path.join(dshHome(), "profiles", name, "cordis.patch.yml")));
 
   const parts = [];
   if (written.length) parts.push(tr("install.m.dshDone", { profiles: written.join(tr("list.sep")) }));
+  if (fixed.length) parts.push(tr("install.m.dshFixed", { profiles: fixed.join(tr("list.sep")) }));
   if (current.length) parts.push(tr("install.m.dshCurrent", { profiles: current.join(tr("list.sep")) }));
   if (conflicts.length) parts.push(tr("install.m.dshConflict", { profiles: conflicts.join(tr("list.sep")) }));
   if (broken.length) parts.push(tr("install.m.dshVerifyFail", { profiles: broken.join(tr("list.sep")) }));

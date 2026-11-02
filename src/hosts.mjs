@@ -139,6 +139,19 @@ export function dshPatchHasAab(file) {
   }
 }
 
+/**
+ * 从 patch 文本里取 aab 的脚本路径（取不到返回空串）。
+ *
+ * DSH 用 YAML 序列化器重写 patch 时会按行宽折行，长路径会变成
+ * `...aab.m\` + 换行 + 缩进 + `js"`（双引号标量的续行）。
+ * 先还原续行再匹配，否则同一条配置在文本层会被当成"路径不存在"。
+ */
+export function aabScriptIn(text) {
+  const joined = text.replace(/\\\n[ \t]*/g, "");
+  const m = joined.match(/^\s*-\s*"?([^"\n]*aab\.mjs)"?\s*$/m);
+  return m ? m[1] : "";
+}
+
 /** 已注册返回 true；未注册 false；宿主 CLI 不可用返回 null */
 export function registered(host) {
   if (host === "workbuddy") {

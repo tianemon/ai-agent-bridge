@@ -126,7 +126,8 @@ const DICT = {
     "install.m.dshDone": "已写入 {profiles}",
     "install.m.dshCurrent": "已是当前配置：{profiles}",
     "install.m.dshConflict": "已有 aab 条目但指向其它路径，未改动：{profiles}",
-    "install.m.dshNoProfile": "~/.dsh/profiles 下没有可写的 profile，跳过",
+    "install.m.dshFixed": "已替换失效路径：{profiles}",
+    "install.m.dshNoProfile": "{dir} 下没有可写的 profile，跳过",
     "install.m.dshVerifyFail": "⚠ 写后校验未通过：{profiles}",
     "install.dshHint": "DeepSeek Harness：重启应用后生效（新开会话不会重新加载 profile）。",
 
@@ -275,7 +276,8 @@ const DICT = {
     "install.m.dshDone": "wrote {profiles}",
     "install.m.dshCurrent": "already up to date: {profiles}",
     "install.m.dshConflict": "existing aab entry points at a different path, left untouched: {profiles}",
-    "install.m.dshNoProfile": "no writable profile under ~/.dsh/profiles, skipped",
+    "install.m.dshFixed": "replaced stale paths in: {profiles}",
+    "install.m.dshNoProfile": "no writable profile under {dir}, skipped",
     "install.m.dshVerifyFail": "⚠ post-write verification failed: {profiles}",
     "install.dshHint": "DeepSeek Harness: restart the app for profiles to reload (a new session is not enough).",
 

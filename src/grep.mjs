@@ -10,8 +10,21 @@ import { t as tr } from "./i18n.mjs";
 const SNIPPET = 480;
 const LEAD = 220;
 
-/** 流式扫一个文件；onLine 返回 true 表示够了，立刻停 */
-async function scanFile(file, onLine) {
+/**
+ * 扫一个文件；onLine 返回 true 表示够了，立刻停。
+ * 磁盘上不是明文的（dsh 的 zstd 多帧）由适配器的 linesOf 解出来，别按文本流硬读。
+ */
+async function scanFile(file, onLine, adapter) {
+  if (typeof adapter?.linesOf === "function") {
+    let lines;
+    try {
+      lines = adapter.linesOf(file);
+    } catch {
+      return;
+    }
+    for (const line of lines) if (onLine(line)) return;
+    return;
+  }
   let stream;
   let rl;
   try {
@@ -91,6 +104,7 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
         } catch {
           return false;
         }
+        if (adapter.grepSkip?.(o)) return false;
         if (mayUser && adapter.userTurnOf(o)) {
           if (userSeen) turn++;
           userSeen = true;
@@ -118,7 +132,7 @@ export async function grepSessions({ query, agent = "auto", project = "", since 
           }
         }
         return hits.length >= limit;
-      });
+      }, adapter);
       if (hits.length >= limit) break;
     }
     if (hits.length >= limit) break;

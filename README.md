@@ -4,7 +4,7 @@
 
 读取另一个 AI 编码工具的会话：**先给最新结论，不够再逐层展开**。
 
-支持 Codex、Claude Code、WorkBuddy、CodeBuddy、EasyMint。会话数据只读；唯一写入的是各客户端的
+支持 Codex、Claude Code、WorkBuddy、CodeBuddy、EasyMint、DeepSeek Harness。会话数据只读；唯一写入的是各客户端的
 MCP 配置，由 `install` 完成，可用 `--dry-run` 预览。
 
 ```bash
@@ -227,11 +227,16 @@ aab rule        # 打印片段；正文走 stdout，写入哪个文件的提示�
 | WorkBuddy | `<home>/.workbuddy/projects/<slug>/<uuid>.jsonl` | `WORKBUDDY_HOME` |
 | CodeBuddy | `<home>/.codebuddy/projects/<slug>/<uuid>.jsonl` | `CODEBUDDY_HOME` |
 | EasyMint | `<home>/.easymint/agent/sessions/--<slug>--/<ts>_<id>.jsonl` | `EASYMINT_HOME` |
+| DeepSeek Harness | `<home>/.dsh/sessions/--<slug>--/session-<uuid>/session.v4.jsonl.zstd` | `DSH_HOME` |
 
 WorkBuddy 与 CodeBuddy 使用同一套写入器（transcript 含 `__codebuddyLocal` 字段），由一个适配器覆盖：
 `type:"message"` 配 `input_text` / `output_text` 块，`function_call` / `function_call_result` /
 `reasoning` / `file-history-snapshot` 行跳过。WorkBuddy 将用户提问包在 `<system-reminder>` 信封中，
 实际文本位于 `<user_query>` 内。
+
+DeepSeek Harness 的会话是**多帧 zstd**（每次追加一个 frame，单条会话实测 69 帧），需逐帧解压；同一会话
+目录下可能同时存在旧版 `session.jsonl.zstd`；只取版本号最高的那个，两个都读会把轮次算成两份。索引取
+`storages/session_projcache/sessions/<id>.json`（明文 JSON），不必解压即可拿到 cwd / 标题 / 模型。
 
 子代理 trace（`subagents/*.jsonl`、`agent-*.jsonl`）排除在外，它们是模型内部的委派过程，不是与用户的
 对话。
@@ -273,6 +278,7 @@ export default {
 - 仅中英两种输出语言。标签全部走 `src/i18n.mjs` 字典，英文模式下若有一条命令输出中文，测试会失败；
   增加语言只需补字典条目。
 - WorkBuddy 的信任确认无法自动化，`aab doctor` 只报告状态。
+- DeepSeek Harness 依赖 Node ≥ 22.15 内置的 zstd；更低版本会跳过这类会话，`aab doctor` 会写明原因。
 
 ## 维护
 
@@ -282,20 +288,3 @@ export default {
 ## 许可
 
 MIT
-
-
-### 用量与模型统计（Codex）
-
-`aab usage` / MCP `session_usage` 只读取用量元数据，不返回对话正文、工具输出或凭据。目前仅适配 Codex；其他来源会明确提示尚未支持，不把缺失记录当作零消耗。
-
-```bash
-aab usage --session <线程ID> --include-children
-aab usage --session <线程ID> --since 2026-10-31T01:26:55Z --until 2026-10-31T01:52:40Z --json
-aab usage --session <线程ID> --turn-id <执行轮UUID>
-```
-
-默认统计最新主线程，`--project` 可限定项目。`--include-children` 按物理线程及父子关系递归汇总，避免子 Agent 共享 session_id 导致混算；`--turn-id` 是 Codex 原生执行轮 UUID（不是 `read --turns` 的编号），也匹配子线程记录的 root_turn_id。时间筛选按用量事件时间且包含边界。文本只展示最近 15 个执行轮，JSON 保留全部统计。
-
-报告提供模型/推理档位/可用的服务档、输入/缓存输入/输出/推理 token、单次输入平均值和峰值、执行轮明细、压缩次数及额度首尾快照。优先使用逐响应记录并按响应 ID 去重；旧记录退回累计差值，不将两种流相加。缓存包含在输入内，推理包含在输出内。覆盖不足、计数器重置、缺字段或缺记录均单独提示；缺字段列的数值仅为已记录部分的合计。
-
-**token 不是套餐扣费账单。** 额度快照是账户共享值，不是该线程独占消耗，也不能在多线程间相加；缺失的模型/档位用 `?` 表示。旧累计流的条数不保证等于请求数，首个累计值可能含未记录历史。该命令不发送模型请求，也不查询在线账户。

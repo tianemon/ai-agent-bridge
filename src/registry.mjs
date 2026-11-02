@@ -9,14 +9,16 @@
  *   parse(files)    返回 {turns, compaction}
  *   userTurnOf(o)   一行（已解析）是否开启新一轮：返回用户原文或 ""（parse 与 grep 共用）
  *   userMarker      廉价的字面预筛；含它才值得 JSON.parse 一次
+ *   linesOf(file)   可选：磁盘上不是明文（如 dsh 的 zstd）时，由适配器自己解出各行给 grep 用
  */
 import codex from "./agents/codex.mjs";
 import claude from "./agents/claude.mjs";
 import easymint from "./agents/easymint.mjs";
 import { workbuddy, codebuddy } from "./agents/codebuddy.mjs";
+import dsh from "./agents/dsh.mjs";
 import { lastMtime, sameProject } from "./agents/_shared.mjs";
 
-const LIST = [codex, claude, easymint, workbuddy, codebuddy];
+const LIST = [codex, claude, easymint, workbuddy, codebuddy, dsh];
 
 export const AGENTS = LIST.map((a) => a.name);
 export const AGENT_LABEL = Object.fromEntries(LIST.map((a) => [a.name, a.label]));

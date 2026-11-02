@@ -2,7 +2,7 @@
 
 Read another AI coding tool's session: **newest conclusion first, escalate only as needed**.
 
-Supports Codex, Claude Code, WorkBuddy, CodeBuddy and EasyMint. Session data is read-only; the only writes
+Supports Codex, Claude Code, WorkBuddy, CodeBuddy, EasyMint and DeepSeek Harness. Session data is read-only; the only writes
 are the MCP client configs, made by `install` and previewable with `--dry-run`.
 
 ```bash
@@ -234,11 +234,18 @@ The default is **this project**: the working directory resolved to its git root.
 | WorkBuddy | `<home>/.workbuddy/projects/<slug>/<uuid>.jsonl` | `WORKBUDDY_HOME` |
 | CodeBuddy | `<home>/.codebuddy/projects/<slug>/<uuid>.jsonl` | `CODEBUDDY_HOME` |
 | EasyMint | `<home>/.easymint/agent/sessions/--<slug>--/<ts>_<id>.jsonl` | `EASYMINT_HOME` |
+| DeepSeek Harness | `<home>/.dsh/sessions/--<slug>--/session-<uuid>/session.v4.jsonl.zstd` | `DSH_HOME` |
 
 WorkBuddy and CodeBuddy share one writer (transcripts carry a `__codebuddyLocal` field), so one adapter covers
 both: `type:"message"` with `input_text` / `output_text` blocks, while `function_call`, `function_call_result`,
 `reasoning` and `file-history-snapshot` lines are skipped. WorkBuddy wraps the user prompt in a
 `<system-reminder>` envelope; the actual text is inside `<user_query>`.
+
+DeepSeek Harness writes **multi-frame zstd** (one frame per append; 69 frames for a single session here), so
+every frame has to be decompressed. A session directory may also hold the older `session.jsonl.zstd`; only the
+highest-versioned file is read, otherwise turns are counted twice. The index comes from
+`storages/session_projcache/sessions/<id>.json`, plain JSON with cwd / title / model, so no decompression is
+needed there.
 
 Subagent traces (`subagents/*.jsonl`, `agent-*.jsonl`) are excluded: they are internal delegation, not the
 conversation with the user.
@@ -284,6 +291,8 @@ Then register it in `LIST` in `src/registry.mjs`.
 - Only Chinese and English output. Every label goes through the `src/i18n.mjs` dictionary; in English mode a
   single Chinese string makes the tests fail. Adding a language means adding dictionary entries only.
 - WorkBuddy's trust confirmation cannot be automated; `aab doctor` only reports the state.
+- DeepSeek Harness needs the zstd support built into Node ≥ 22.15; older runtimes skip those sessions and
+  `aab doctor` says why.
 
 ## Maintaining
 
@@ -293,20 +302,3 @@ Release and installation rules live in [`docs/RELEASING.md`](docs/RELEASING.md),
 ## License
 
 MIT
-
-
-### Usage and model accounting (Codex)
-
-`aab usage` / MCP `session_usage` reads usage metadata only, without returning conversation content, tool output or credentials. Currently only Codex is supported; other sources are explicitly rejected rather than reported as zero usage.
-
-```bash
-aab usage --session <thread-id> --include-children
-aab usage --session <thread-id> --since 2026-10-31T01:26:55Z --until 2026-10-31T01:52:40Z --json
-aab usage --session <thread-id> --turn-id <execution-turn-uuid>
-```
-
-The newest root thread is selected by default; `--project` optionally restricts it. `--include-children` recursively follows physical thread/parent IDs, keeping subagents with a shared session_id separate. `--turn-id` is a native Codex execution UUID, not a `read --turns` number; descendant root_turn_id also matches. Time bounds are inclusive and apply to usage event timestamps. Text lists the latest 15 execution turns; JSON retains all summaries.
-
-Reports include recorded model/reasoning/service tiers, input/cached input/output/reasoning tokens, mean and maximum input per response, turn summaries, compactions and first/last rate-limit snapshots. Per-response records deduplicated by response ID take precedence; legacy cumulative deltas are a fallback and never added to the response stream. Cached input is a subset of input; reasoning is a subset of output. Incomplete coverage, resets, missing fields and unavailable records are disclosed; missing-field columns sum only the recorded portion.
-
-**Tokens are not a subscription billing statement.** Rate snapshots are account-wide, not exclusive thread charges, and must not be summed across threads. Missing models/tiers show `?`. Legacy delta counts are not guaranteed request counts, and the first cumulative total can include unrecorded history. No model requests or online account queries are made.

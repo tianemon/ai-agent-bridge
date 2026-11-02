@@ -19,7 +19,6 @@ import { install } from "./install.mjs";
 import { doctor } from "./doctor.mjs";
 import { prompt } from "./prompt.mjs";
 import { rule } from "./rule.mjs";
-import { sessionUsage, renderUsage } from "./usage.mjs";
 import { VERSION } from "./version.mjs";
 import { t as tr, isZh } from "./i18n.mjs";
 
@@ -145,14 +144,6 @@ export async function actRead(o) {
   return warningsOf(input.warnings) + render(loaded, { level: o.level, maxChars: o["max-chars"], turns: input.turns });
 }
 
-export async function actUsage(o) {
-  const report = await sessionUsage({ agent: o.agent || "codex", session: o.session,
-    project: o.project ? defaultProject(o.project) : "", since: o.since, until: o.until,
-    turnId: o["turn-id"] ?? o.turnId,
-    includeChildren: o["include-children"] === "true" || o.includeChildren === true });
-  return o.json === "true" || o.json === true ? JSON.stringify(report, null, 2) : renderUsage(report);
-}
-
 export function actList(o) {
   const input = resolveInputs(o.known, o);
   const bad = agentGuard(input.agent);
@@ -189,7 +180,7 @@ export function actList(o) {
         const segs = s.files.length > 1 ? tr("list.segs", { n: s.files.length }) : "";
         // 标题放最后一列：ids 认不出是哪个会话，标题才是人真正在看的
         const title = s.title ? String(s.title).slice(0, 60) : "";
-        return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(11)} ${proj.padEnd(14).slice(0, 14)} ${String(s.id).slice(0, 8)}  ${mb.padStart(5)}MB${segs}${title ? "  " + title : ""}`;
+        return `${t}  ${String(AGENT_LABEL[s.agent]).padEnd(16)} ${proj.padEnd(14).slice(0, 14)} ${String(s.id).slice(0, 8)}  ${mb.padStart(5)}MB${segs}${title ? "  " + title : ""}`;
       })
       .join("\n")
   );
@@ -221,7 +212,7 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
 
 用法：
   aab latest   从最新一条结论开始（默认 level=1，不够再加）
-      --agent codex|claude|workbuddy|codebuddy|easymint|auto   默认 auto（所有来源里最新的）
+      --agent codex|claude|workbuddy|codebuddy|easymint|dsh|auto   默认 auto（所有来源里最新的）
       --level 1..4                         1=结论 2=最近3轮 3=需求+结论 4=命令/文件/git
       --session <id 前缀>                   直接锚定某次会话
       --turns 12-14 | 12 | last:5 | from:30 | around:40±2   直接要某几轮（跳过阶梯）
@@ -256,7 +247,7 @@ const HELP_EN = `aab — pick up where another AI coding tool left off, with onl
 
 Usage:
   aab latest   start from the newest conclusion (level=1 by default; raise it if needed)
-      --agent codex|claude|workbuddy|codebuddy|easymint|auto   default: auto (newest across all)
+      --agent codex|claude|workbuddy|codebuddy|easymint|dsh|auto   default: auto (newest across all)
       --level 1..4                      1=conclusion 2=last 3 turns 3=requirement+conclusion 4=commands/files/git
       --session <id prefix>             anchor to one specific session
       --turns 12-14 | 12 | last:5 | from:30 | around:40±2   exact slice (skips the ladder)
@@ -287,7 +278,7 @@ Usage:
 Output language: AAB_LANG=zh|en overrides; otherwise LC_ALL / LANG (English by default).
 Conversation text is never translated — only the surrounding labels.`;
 
-const helpText = () => (isZh() ? HELP_ZH : HELP_EN) + "\n\n" + tr("usage.help");
+const helpText = () => (isZh() ? HELP_ZH : HELP_EN);
 
 /* ── 入口 ── */
 export async function runCli(argv) {
@@ -303,8 +294,6 @@ export async function runCli(argv) {
       return actList(o);
     case "grep":
       return actGrep(o);
-    case "usage":
-      return actUsage(o);
     case "agents":
       return AGENTS.map((a) => `${a}  ${AGENT_LABEL[a]}`).join("\n");
     case "install": {

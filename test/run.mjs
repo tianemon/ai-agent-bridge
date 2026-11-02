@@ -5,7 +5,6 @@
  * 没有会话的工具会被跳过而不是判失败——这个工具的价值取决于本机有什么。
  * 判定原则：不崩、不错范围、不撒谎（不把旁白当结论、不把别的项目当本项目）。
  */
-import { usageTests } from "./usage.mjs";
 import { spawnSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,6 +16,8 @@ import { validateDict } from "../src/i18n.mjs";
 import { grepSessions } from "../src/grep.mjs";
 import { latestTitlesFromIndex, userTurnOf as codexUserTurn } from "../src/agents/codex.mjs";
 import { userTurnOf as claudeUserTurn } from "../src/agents/claude.mjs";
+import dshAdapter, { linesOf as dshLines } from "../src/agents/dsh.mjs";
+import zlib from "node:zlib";
 import { userTurnOf as easymintUserTurn } from "../src/agents/easymint.mjs";
 import { workbuddy, userTurnOf as buddyUserTurn } from "../src/agents/codebuddy.mjs";
 
@@ -76,7 +77,7 @@ console.log(`本机可用工具：${agents.join(", ") || "（无）"}\n`);
 check("help 列出全部子命令", () => {
   const r = run(["help"]);
   noCrash(r);
-  for (const c of ["latest", "list", "read", "grep", "usage", "mcp"]) has(r.out, c);
+  for (const c of ["latest", "list", "read", "grep", "mcp"]) has(r.out, c);
   return "6 个子命令";
 });
 
@@ -102,10 +103,79 @@ check("list 默认有结果", () => {
   return `${r.out.trim().split("\n").length} 行`;
 });
 
+check("dsh：多帧 zstd 全部解出，不是只解第一帧", () => {
+  if (typeof zlib.zstdCompressSync !== "function") return "当前 Node 无 zstd，跳过";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aab-dsh-"));
+  const file = path.join(dir, "session.v4.jsonl.zstd");
+  const line1 = JSON.stringify({ type: "session", version: 4, id: "session-x", cwd: "/tmp/x" });
+  const line2 = JSON.stringify({
+    type: "user/message",
+    data: { content: [{ type: "text", text: "第二帧里的提问" }], source: { kind: "user" } },
+  });
+  // 追加写：每次一个独立 frame，这正是 dsh 的写法
+  fs.writeFileSync(
+    file,
+    Buffer.concat([
+      zlib.zstdCompressSync(Buffer.from(line1 + "\n")),
+      zlib.zstdCompressSync(Buffer.from(line2 + "\n")),
+    ])
+  );
+  const lines = dshLines(file);
+  if (!lines.some((l) => l.includes("第二帧里的提问"))) {
+    throw new Error(`只解出 ${lines.filter(Boolean).length} 行 —— 第二帧被丢了`);
+  }
+  return `${lines.filter(Boolean).length} 行（两帧都在）`;
+});
+
+check("dsh：没有 projcache 时也能从会话头拿到 cwd", () => {
+  if (typeof zlib.zstdCompressSync !== "function") return "当前 Node 无 zstd，跳过";
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "aab-dsh-home-"));
+  const dir = path.join(home, "sessions", "--probe--", "session-deadbeef-0000-0000-0000-000000000001");
+  fs.mkdirSync(dir, { recursive: true });
+  // 会话头的 cwd 在顶层（不是 data 里），写错了这里会拿到空字符串
+  const head = JSON.stringify({ type: "session", version: 4, id: "session-deadbeef", cwd: "/Users/amon/probe" });
+  const user = JSON.stringify({
+    type: "user/message",
+    data: { content: [{ type: "text", text: "只有头也能读出项目" }], source: { kind: "user" } },
+  });
+  fs.writeFileSync(
+    path.join(dir, "session.v4.jsonl.zstd"),
+    Buffer.concat([zlib.zstdCompressSync(Buffer.from(head + "\n")), zlib.zstdCompressSync(Buffer.from(user + "\n"))])
+  );
+
+  const prev = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  try {
+    const rows = dshAdapter.index("");
+    if (!rows.length) throw new Error("没索引到会话");
+    if (rows[0].cwd !== "/Users/amon/probe") throw new Error(`cwd 丢了：${JSON.stringify(rows[0].cwd)}`);
+    if (!rows[0].id.startsWith("deadbeef") || rows[0].id.includes("session-")) {
+      throw new Error(`id 没去掉 session- 前缀：${rows[0].id}`);
+    }
+    if (!rows[0].title) throw new Error("标题没兜底成首个提问");
+  } finally {
+    if (prev === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = prev;
+  }
+  return "cwd / id / 标题都拿到了";
+});
+
+check("dsh：本机有会话时，列表与最新结论都能读", () => {
+  const list = run(["list", "--agent", "dsh", "--limit", "5"]);
+  noCrash(list);
+  if (!/MB/.test(list.out)) return "本机无 dsh 会话，跳过";
+  const one = run(["latest", "--agent", "dsh", "--level", "1"]);
+  noCrash(one);
+  if (!/DeepSeek Harness/.test(one.out)) throw new Error(one.out.slice(0, 120));
+  if (!/轮需求|turns/.test(one.out)) throw new Error("表头缺轮次：" + one.out.slice(0, 120));
+  return "ok";
+});
+
 check("list --limit 0 夹到 1", () => {
   const r = run(["list", "--limit", "0"]);
   noCrash(r);
-  has(r.out, "10-");
+  // 只校验日期形状，别写死月份：`10-` 在 11 月必然失败
+  if (!/^\d{2}-\d{2} \d{2}:\d{2}\s/m.test(r.out)) throw new Error(`不像日期行：${r.out.slice(0, 80)}`);
   const n = r.out.trim().split("\n").filter((l) => l.includes("MB")).length;
   if (n !== 1) throw new Error(`出 ${n} 行`);
   return "1 行";
@@ -671,7 +741,6 @@ check("AAB_LANG=en 时所有结构性输出无中文（发版闸门）", () => {
     ["nosuchcmd"],
     ["latest", "--agent", "cursor"],
     ["grep"],
-    ["usage", "--agent", "claude"],
     { args: ["list", "--since", "1s"], home: emptyHome },
   ];
   const bad = [];
@@ -888,7 +957,8 @@ check("doctor 列出 EasyMint 宿主并识别注册状态", () => {
     env: { ...process.env, HOME: home, EASYMINT_HOME: "", AAB_LANG: "zh" },
   });
   const lines = (r.stdout || "").split("\n");
-  const start = lines.findIndex((l) => l.includes("宿主"));
+  // 上方有一句「这是宿主自带的 node」，只按子串找会从那里开始切
+  const start = lines.findIndex((l) => l.includes("■") && l.includes("宿主"));
   const line = lines.slice(start).find((l) => l.includes("EasyMint"));
   if (!line) throw new Error("宿主段没有 EasyMint");
   if (!line.includes("已注册")) throw new Error(`状态不对：${line.trim()}`);
@@ -954,10 +1024,10 @@ await mcpCheck("notifications 不产生响应", async () => {
   return "ok";
 });
 
-await mcpCheck("tools/list 出 6 个工具", async () => {
+await mcpCheck("tools/list 出 5 个工具", async () => {
   const r = await mcpRoundtrip([{ jsonrpc: "2.0", id: 2, method: "tools/list" }], 1200);
   const names = (r[0]?.result?.tools || []).map((t) => t.name);
-  for (const w of ["session_latest", "session_list", "session_read", "session_grep", "session_agents", "session_usage"]) {
+  for (const w of ["session_latest", "session_list", "session_read", "session_grep", "session_agents"]) {
     if (!names.includes(w)) throw new Error(`缺 ${w}`);
   }
   return names.join(",");
@@ -1018,13 +1088,6 @@ await mcpCheck("坏 JSON 行之后仍能响应", async () => {
 });
 
 /* ── 汇总 ── */
-await mcpCheck("usage metadata isolated regressions", async () => `${await usageTests()} cases`);
-await mcpCheck("session_usage MCP rejects unsupported sources without reading content", async () => {
-  const r = await mcpRoundtrip([{ jsonrpc: "2.0", id: 88, method: "tools/call", params: { name: "session_usage", arguments: { agent: "claude" } } }], 1200);
-  if (!r[0]?.result?.isError) throw new Error("unsupported source was not rejected");
-  return "ok";
-});
-
 const all = [...results, ...mcpCases];
 const bad = all.filter((r) => !r.pass);
 for (const r of all) console.log(`${r.pass ? "PASS" : "FAIL"}  ${r.name}  —  ${r.detail}`);

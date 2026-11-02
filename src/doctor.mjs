@@ -88,6 +88,11 @@ export function doctor() {
       lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✗ ${tr("doc.missingDir")}  ${root || "(?)"}`);
       continue;
     }
+    const avail = getAgent(name).available;
+    if (typeof avail === "function" && !avail()) {
+      lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✗ ${tr("doc.needsZstd")}  ${root}`);
+      continue;
+    }
     const rows = indexAll(name);
     const latest = rows.reduce((m, r) => Math.max(m, r.mtimeMs || 0), 0);
     lines.push(`  ${AGENT_LABEL[name].padEnd(12)} ✓ ${tr("doc.sessions", { n: rows.length, ago: ago(latest) })}`);

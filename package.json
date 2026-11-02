@@ -4,8 +4,8 @@
   "description": "Read another AI coding tool's session — newest conclusion first, escalate only as far as you need.",
   "type": "module",
   "bin": {
-    "aab": "./bin/aab.mjs",
-    "agent-bridge": "./bin/aab.mjs"
+    "aab": "bin/aab.mjs",
+    "agent-bridge": "bin/aab.mjs"
   },
   "main": "./src/registry.mjs",
   "files": [

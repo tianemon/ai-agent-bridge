@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { AGENTS, AGENT_LABEL, getAgent, indexAll } from "./registry.mjs";
 import { HOSTS, detectHosts, registered, approvalState, trustStale, readEasymintConfig, dshPatchPaths, dshPatchHasAab, aabScriptIn, NAME } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
-import { resolveNode, runtimeMode } from "./install.mjs";
+import { resolveNode, resolveScriptPath, runtimeMode } from "./install.mjs";
 
 const existsDir = (p) => {
   try {
@@ -74,7 +74,7 @@ function staleEntry(host) {
 }
 
 export async function doctor() {
-  const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
+  const script = resolveScriptPath();
   const lines = [tr("doc.runtime")];
   lines.push(`  node    ${process.version}  ${process.execPath}`);
   const stable = resolveNode();

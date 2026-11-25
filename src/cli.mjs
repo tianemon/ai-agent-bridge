@@ -7,6 +7,7 @@
  *   aab grep "关键词" --agent codex
  */
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
@@ -61,7 +62,7 @@ function looksLikeProject(dir) {
   }
 }
 
-const SELF_DIR = path.resolve(new URL("..", import.meta.url).pathname);
+const SELF_DIR = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const HOME_DIR = path.resolve(os.homedir());
 
 /** 没显式给 project 时：cwd 像个项目就用它（归到 git 根），否则不限定。

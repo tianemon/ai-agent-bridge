@@ -10,6 +10,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { HOSTS, detectHosts, registered, approvalState, recordEntry, readEasymintConfig, dshPatchHasAab, dshPatchPaths, dshHome, aabScriptIn, NAME, LEGACY } from "./hosts.mjs";
 import { t as tr } from "./i18n.mjs";
@@ -41,6 +42,10 @@ export function resolveNode() {
   return process.execPath;
 }
 
+export function resolveScriptPath() {
+  return fs.realpathSync(fileURLToPath(new URL("../bin/aab.mjs", import.meta.url)));
+}
+
 const PKG = "@tianemon/ai-agent-bridge";
 
 /**
@@ -49,7 +54,7 @@ const PKG = "@tianemon/ai-agent-bridge";
  *   npx 缓存（~/.npm/_npx/…）  → 缓存会被清掉，绝不能钉在里面，改用 npx 解析
  */
 function commandFor() {
-  const script = fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname);
+  const script = resolveScriptPath();
   if (/[\\/]_npx[\\/]/.test(script)) {
     return { command: "npx", args: ["-y", PKG, "mcp"], note: tr("install.note.npx") };
   }
@@ -445,7 +450,7 @@ export function install({ targets, dryRun = false } = {}) {
     out.push(tr("install.wbPath"));
     out.push(tr("install.wbWhy"));
   }
-  const rm = runtimeMode(fs.realpathSync(new URL("../bin/aab.mjs", import.meta.url).pathname));
+  const rm = runtimeMode(resolveScriptPath());
   if (rm.dev) {
     out.push(tr("install.devHint"));
     out.push(tr("install.devHint2"));

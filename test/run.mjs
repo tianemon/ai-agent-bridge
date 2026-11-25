@@ -9,6 +9,7 @@ import { spawnSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildLevels, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection, runtimeMode, verifyDshProfile } from "../src/install.mjs";
@@ -21,7 +22,7 @@ import zlib from "node:zlib";
 import { userTurnOf as easymintUserTurn } from "../src/agents/easymint.mjs";
 import { workbuddy, userTurnOf as buddyUserTurn } from "../src/agents/codebuddy.mjs";
 
-const SB = new URL("../bin/aab.mjs", import.meta.url).pathname;
+const SB = fileURLToPath(new URL("../bin/aab.mjs", import.meta.url));
 const NODE = process.execPath;
 const results = [];
 

@@ -52,8 +52,7 @@ const INSTRUCTIONS = [
     "「继续上一个会话」「接手之前的活」——都直接调 session_latest，不要先去 find 或 grep jsonl。",
   'English triggers: "read the latest codex session", "read the workbuddy session", ',
   '"pick up what the other tool was doing", "continue where codex left off". ',
-  "Default level=1 (~120 tokens); raise the level only if it is not enough, and anchor with turns when you ",
-  "already know which turns you need. If the user names a tool, pass agent=<that tool>; do not leave it auto. ",
+  "Read the latest turn by default. Pass turns to select specific turns, and pass agent when the user names a tool. ",
   "Routing: unknown session -> session_list; known id/prefix -> session_read; one specific detail -> ",
   "session_grep (hits carry the turn number, then session_read with turns=<N>; newest sessions first, so ",
   "pass agent/since when the current session eats the limit). ",
@@ -87,11 +86,8 @@ const TOOLS = [
       `「看看 claude 那边做到哪了」「接着 codex 最新会话继续做」「继续上一个会话」「接手之前的活」都走这个。` +
       'Use this for "read the latest codex session", "read the workbuddy session", "where did claude get to", ' +
       '"pick up what the other tool was doing", "continue where codex left off". ' +
-      "level=1 (default) returns only the final conclusion, the cheapest possible answer. Levels are different " +
-      "views, not more of the same: 2 = last 3 turns, 3 = requirement + what each turn settled on, 4 = commands/files/git state; " +
-      "every reply quotes the total token cost of each other view. If the user names a tool, pass " +
-      "agent=<tool> instead of leaving it auto; if you already know the session id/prefix, use session_read; " +
-      "if you know the turns, pass them — anchoring beats guessing.",
+      "Returns final answers for selected turns. Omit turns for just the latest turn. " +
+      "If the user names a tool, pass agent=<tool>; if the session id is known, use session_read.",
     inputSchema: {
       type: "object",
       properties: {
@@ -101,17 +97,16 @@ const TOOLS = [
           default: "auto",
           description: "which tool; auto = newest across all of them",
         },
-        level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
         turns: {
           type: "string",
           description:
-            "exact turns, takes precedence over level: 12-14 range | 12 single | last:5 last five | from:30 from turn 30 | around:40±2 window",
+            "selection (default last:1): 12-14 range | 12 single | last:5 last five | from:30 from turn 30 | around:40±2 window",
         },
         maxChars: {
           type: "integer",
           minimum: 200,
           maximum: 20000,
-          description: "cap for this reply; defaults to 4200 at level 1 and 9000 otherwise",
+          description: "character cap; default 4200 for one turn and 9000 for multiple turns",
         },
         since: { type: "string", description: "only sessions active in this window, e.g. 24h / 7d / 2026-10-23" },
         session: { type: "string", description: "session id or prefix, to anchor one specific session" },
@@ -154,7 +149,7 @@ const TOOLS = [
   {
     name: "session_read",
     description:
-      `Read one specific session (by id prefix) from ${TOOL_LIST}, with the same level / turns controls. ` +
+      `Read one specific session (by id prefix) from ${TOOL_LIST}, with the same turns selector. ` +
       "中文：已知是哪一次会话（有 id 或前缀）时用；或先 list/latest 拿到 id 再来读指定会话。" +
       "Use it when you already know which session it is, or after session_latest gave you an id.",
     inputSchema: {
@@ -162,11 +157,10 @@ const TOOLS = [
       properties: {
         session: { type: "string", description: "session id or prefix; empty = the newest one for that tool" },
         agent: { type: "string", enum: ["auto", ...AGENTS], default: "auto" },
-        level: { type: "integer", minimum: 1, maximum: 4, default: 1 },
         turns: {
           type: "string",
           description:
-            "exact turns, takes precedence over level: 12-14 range | 12 single | last:5 last five | from:30 from turn 30 | around:40±2 window",
+            "selection (default last:1): 12-14 range | 12 single | last:5 last five | from:30 from turn 30 | around:40±2 window",
         },
         maxChars: { type: "integer", minimum: 200, maximum: 20000 },
         project: { type: "string", description: "absolute project path; empty = cwd (subdirectories resolve to the git root)" },
@@ -180,7 +174,7 @@ const TOOLS = [
       `Keyword search / 搜索 inside recent sessions of ${TOOL_LIST} — up to 480 characters per hit, 8 hits by ` +
       "default; reasoning blocks are never searched. Each hit carries the session id and turn number, so the " +
       "follow-up is session_read(turns=<N>). Sessions are scanned newest-first; when the limit is reached, " +
-      "narrow with agent=<tool> or since=<window>. 中文：只在前面的 level 都不够、要确认某个具体细节时用" +
+      "narrow with agent=<tool> or since=<window>. 中文：需要确认具体关键词时用" +
       "（「那个会话里提过 X 吗」「搜一下报错原文」），别用它整篇导出会话。",
     inputSchema: {
       type: "object",

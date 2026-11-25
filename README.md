@@ -2,7 +2,7 @@
 
 **[English](README.en.md)**
 
-读取另一个 AI 编码工具的会话：**先给最新结论，不够再逐层展开**。
+读取另一个 AI 编码工具的会话：**默认读取最新一轮的结论，可指定轮次**。
 
 两个概念分开看：
 
@@ -21,54 +21,19 @@ npx -y @tianemon/ai-agent-bridge doctor      # 能读到谁的会话、哪个客
 
 安装后命令为 `aab`，别名 `agent-bridge`。零依赖，Node ≥ 18。
 
-## 输出
+## 按轮次读取
 
-```
-■ Codex · 2026-10-25 10:03 · 续跑 4 段 · gpt-6.1-sol
-  会话 01a16729-0aed-7012 · 共 99 轮需求 · /Users/amon/dev/project/EasyMint
-  标题 解析视频并仿制 UI 风格
+`latest` 和 `read` 默认只返回所选会话最新一轮的最终答复。该轮还没有最终答复时，会明确标出。
 
-【level 1 · 最新进展（未收尾）】
-第 99 轮 · 用户问：重新发布1.4.0
+| `--turns` | 读取范围 |
+|---|---|
+| `15` | 第 15 轮 |
+| `12-14` | 第 12 到 14 轮 |
+| `last:5` | 最近 5 轮 |
+| `from:30` | 从第 30 轮读到最后 |
+| `around:40±2` | 第 40 轮及前后各 2 轮 |
 
-（该轮没有收尾结论——会话可能中断、仍在运行，或最后一条只是进展旁白）
-
-我会把这些界面修正并入 1.4.0，完成发版检查后替换标签和 Release，触发三平台重新构建。
-
-── 退路：最近一条结论在第 98 轮（约 +93 token）──
-已实现：Mint 头像和名称移到回复上方；去掉回复气泡底色；只有结论保留复制、钉住、重新回答。
-
-── 不够就再看一层（同一会话再调一次，换个 level）──
-  level=2  最近 3 轮问答  ≈ 合计 551 token（比当前多 368）
-  level=3  全部需求与结论（每轮一行）  ≈ 合计 4130 token（比当前多 3947）
-  level=4  命令 / 文件 / git 状态  ≈ 合计 2494 token（比当前多 2311）
-  当前 level=1，全文约 183 token
-```
-
-该会话原文 87 MB，`level=1` 为 183 token。
-
-## 阶梯
-
-| 层 | 内容 | 成本（99 轮会话实测） |
-|---|---|---|
-| 1 | 最后一条结论 + 该轮提问 | 183 token |
-| 2 | 最近 3 轮（提问 + 结论） | 551 token |
-| 3 | 每轮需求 + 结论 | 4130 token |
-| 4 | 改动文件 / 命令 / git 状态 | 2494 token（前 40 个文件、最近 15 条命令） |
-| `turns` | 指定切片：`12-14`、`12`、`last:5`、`from:60`、`around:40±2` | 由切片决定 |
-
-每层是独立视角，不是叠加：报价是该视角全文的成本，与当前停在哪一层无关。第 3 层随轮数线性增长，
-长会话中可能高于第 4 层，按报价选择。
-
-最后一轮没有结论时（中断、仍在运行、末条为进展说明），第 1 层会明确标注，并附最近一条有结论的
-轮次及其轮号与成本。
-
-## 设计取舍
-
-- **不整份读取。** 只取用户提问、最终 assistant 文本、工具调用目标与 git 状态；思考块、工具输出、
-  `base_instructions` 跳过。
-- **四层作答，够用即停。** 每层附下一层的 token 成本。
-- **已知信息由调用方传入**（`--known` / `known`），不依赖推测。
+MCP 的 `session_latest` 和 `session_read` 使用相同的 `turns` 写法。每轮显示适配器识别的最终答复，保留原文。会话标题和轮次编号用于定位。
 
 ## 安装
 
@@ -229,14 +194,14 @@ WorkBuddy    ✓ 已注册 · ⚠ 信任记录对应的是旧配置，需重新�
 
 ```bash
 aab list --since 24h                     # 时间、工具、项目、id、体积、标题
-aab latest --agent codex --level 1       # 最新结论
-aab latest --agent codex --level 3       # 更高一层
+aab latest --agent codex                 # 最新结论
+aab latest --agent codex --turns last:3 # 最近三轮
 aab latest --turns 40-41                 # 精确区间
 aab latest --turns last:5                # 最近 5 轮
 aab latest --turns from:60               # 第 60 轮至末尾
 aab latest --turns "around:40±2"         # 第 40 轮前后窗口（默认跨度 3）
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
-aab read --session 53bf411c --level 2
+aab read --session 53bf411c --turns last:3
 aab grep "paths-ignore" --agent claude --limit 3   # 命中带会话 id 与轮次号
 aab rule                                 # 打印可粘进 CLAUDE.md / AGENTS.md 的常驻规则
 ```
@@ -335,12 +300,10 @@ export default {
 ## 限制
 
 - **会话数据只读。** 不写任何工具的数据目录；唯一写入的是 MCP 配置（`install`，可预览）。
-  外部进程仅 `git log` / `git status` / `git rev-parse`，固定参数，不经 shell。
-- 单个会话可达数十 MB（本机实测 87 MB），分层读取，不会整份进入上下文。
+- 单个会话可达数十 MB（本机实测 87 MB），按选定轮次返回结论。
 - Windows 未实测。目录 slug 的兜底逻辑假设 POSIX 路径；主判据是从文件读取 `cwd`，只影响头部缺
   `cwd` 的会话。
-- 不提供会话浏览界面与全文检索，只做分级读取。
-- 用户提问逐字读取。在上一个工具中输入的任何内容（含密钥）都会出现在新上下文中。
+- `grep` 会在会话记录中搜索关键词，命中片段可能包含用户输入。
 - 仅中英两种输出语言。标签全部走 `src/i18n.mjs` 字典，英文模式下若有一条命令输出中文，测试会失败；
   增加语言只需补字典条目。
 - WorkBuddy 的信任确认无法自动化，`aab doctor` 只报告状态。

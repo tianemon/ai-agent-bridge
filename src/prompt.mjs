@@ -44,13 +44,13 @@ const ZH = `# ai-agent-bridge 安装指令（给 AI 编码 agent 执行）
    会话必读的。
 
 装好之后，读另一个工具的会话：
-- 有 MCP：调工具 session_latest（先 level=1，不够再 2/3/4；已知轮次用 turns:"12-14" 或 "last:5"）
-- 没有 MCP：npx -y @tianemon/ai-agent-bridge latest --agent codex --level 1
+- 有 MCP：调工具 session_latest（默认最新一轮；用 turns:"12-14" 或 "last:5" 指定轮次）
+- 没有 MCP：npx -y @tianemon/ai-agent-bridge latest --agent codex
 - 不知道是哪次：npx -y @tianemon/ai-agent-bridge list --since 24h
 
 注意：包名带 scope，不要写成 \`npx ai-agent-bridge\`（那是别人的包）。
 
-约定：默认只读，不改任何工具的数据目录；输出末尾会标下一层的 token 代价，够用就停。`;
+约定：默认只读，不改任何工具的数据目录。`;
 
 const EN = `# ai-agent-bridge install instructions (for an AI coding agent to execute)
 
@@ -94,15 +94,13 @@ You have shell access. Run these in order; if any step exits non-zero, stop and 
 
 Once installed, to read another tool's session:
 
-- with MCP: call session_latest (start at level=1; raise to 2/3/4 only if needed; if you know the turns use
-  turns:"12-14" or "last:5")
-- without MCP: npx -y @tianemon/ai-agent-bridge latest --agent codex --level 1
+- with MCP: call session_latest (defaults to the latest turn; select turns with "12-14" or "last:5")
+- without MCP: npx -y @tianemon/ai-agent-bridge latest --agent codex
 - not sure which session: npx -y @tianemon/ai-agent-bridge list --since 24h
 
 Note: the package name is scoped — do not write \`npx ai-agent-bridge\` (that is someone else's package).
 
-Contract: read-only, never modify another tool's data directory; every reply ends with the token cost of the
-next level, so stop as soon as you have enough.`;
+Contract: read-only, never modify another tool's data directory.`;
 
 export function prompt() {
   return isZh() ? ZH : EN;

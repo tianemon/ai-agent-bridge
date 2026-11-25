@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildLevels, renderTurns } from "../src/ladder.mjs";
+import { render, renderTurns } from "../src/ladder.mjs";
 import { parseTurns } from "../src/known.mjs";
 import { dropTomlSection, runtimeMode, verifyDshProfile } from "../src/install.mjs";
 import { validateDict } from "../src/i18n.mjs";
@@ -165,7 +165,7 @@ check("dsh：本机有会话时，列表与最新结论都能读", () => {
   const list = run(["list", "--agent", "dsh", "--limit", "5"]);
   noCrash(list);
   if (!/MB/.test(list.out)) return "本机无 dsh 会话，跳过";
-  const one = run(["latest", "--agent", "dsh", "--level", "1"]);
+  const one = run(["latest", "--agent", "dsh"]);
   noCrash(one);
   if (!/DeepSeek Harness/.test(one.out)) throw new Error(one.out.slice(0, 120));
   if (!/轮需求|turns/.test(one.out)) throw new Error("表头缺轮次：" + one.out.slice(0, 120));
@@ -205,37 +205,14 @@ check("list --since 无法解析时不崩", () => {
 
 /* ── latest 矩阵 ── */
 for (const agent of agents) {
-  for (const level of [1, 2, 3, 4]) {
-    check(`latest ${agent} L${level}`, () => {
-      const r = run(["latest", "--agent", agent, "--level", String(level), "--scope", "global"]);
-      noCrash(r);
-      has(r.out, `【level ${level} ·`);
-      if (r.ms > 8000) throw new Error(`${r.ms}ms 过慢`);
-      return `${r.ms}ms`;
-    });
-  }
+  check(`latest ${agent} 默认只读最新一轮`, () => {
+    const r = run(["latest", "--agent", agent, "--scope", "global"]);
+    noCrash(r);
+    if (!/【第 (\d+)-\1 轮 · 共 \1 轮】/.test(r.out)) throw new Error(r.out.slice(0, 180));
+    if (r.ms > 8000) throw new Error(`${r.ms}ms 过慢`);
+    return `${r.ms}ms`;
+  });
 }
-
-check("latest --level abc 回落 1", () => {
-  const r = run(["latest", "--level", "abc", "--scope", "global"]);
-  noCrash(r);
-  has(r.out, "【level 1 ·");
-  return "ok";
-});
-
-check("latest --level 99 夹到 4", () => {
-  const r = run(["latest", "--level", "99", "--scope", "global"]);
-  noCrash(r);
-  has(r.out, "【level 4 ·");
-  return "ok";
-});
-
-check("latest --max-chars 真的截断", () => {
-  const r = run(["latest", "--level", "2", "--max-chars", "300", "--scope", "global"]);
-  noCrash(r);
-  has(r.out, "截断");
-  return "ok";
-});
 
 /* ── turns / known ── */
 check("latest --turns 1-2 出指定区间", () => {
@@ -267,7 +244,7 @@ check("latest --turns 乱写被忽略并提示", () => {
 });
 
 check("known JSON 一次性传全", () => {
-  const known = JSON.stringify({ turns: "1", level: 1 });
+  const known = JSON.stringify({ turns: "1" });
   const r = run(["latest", "--known", known, "--scope", "global"]);
   noCrash(r);
   has(r.out, "【第 1-1 轮");
@@ -285,7 +262,7 @@ check("显式参数优先于 known", () => {
 check("known 坏 JSON 不崩", () => {
   const r = run(["latest", "--known", "{不是json", "--scope", "global"]);
   noCrash(r);
-  has(r.out, "【level 1 ·");
+  if (!/【第 (\d+)-\1 轮 · 共 \1 轮】/.test(r.out)) throw new Error(r.out.slice(0, 180));
   return "ok";
 });
 
@@ -294,6 +271,7 @@ check("read 无 --session 取最新", () => {
   const r = run(["read", "--scope", "global"]);
   noCrash(r);
   has(r.out, "会话 ");
+  if (!/【第 (\d+)-\1 轮 · 共 \1 轮】/.test(r.out)) throw new Error(r.out.slice(0, 180));
   return "ok";
 });
 
@@ -310,7 +288,7 @@ if (agents.includes("codex")) {
     // 列表现在只印 8 位前缀（后面让位给标题）：取 "id  12.3MB" 这一段
     const id = list.match(/([0-9a-f]{8})\s+\d+(?:\.\d+)?MB/)?.[1];
     if (!id) throw new Error("列表里没解析到 id");
-    const r = run(["read", "--agent", "codex", "--session", id, "--level", "1"]);
+    const r = run(["read", "--agent", "codex", "--session", id]);
     noCrash(r);
     has(r.out, id);
     return `前缀 ${id}`;
@@ -369,7 +347,7 @@ check("grep 轮次口径：四家 userTurnOf 与 parse 一致", () => {
 
 {
   // WorkBuddy 的 function_call.arguments 是 JSON 字符串（实测 175/175），不是对象；
-  // 不解析就会把整串当目标，level 4 既没有命令也提不出文件。
+  // 解析结构化输入，保留独立的命令和文件目标。
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aab-wb-"));
   const file = path.join(dir, "wb.jsonl");
   fs.writeFileSync(
@@ -461,17 +439,24 @@ check("list 里多段会话带段标记", () => {
   return `${withSegs.length}/${lines.length} 行带段标记`;
 });
 
-check("level=1 未收尾时给出上一轮结论", () => {
-  const t = (i, user, finals, narration = []) => ({ i, user, userTs: "", finals, narration, tools: [], files: [] });
+check("默认读取最新一轮，缺少答复时限制在该轮", () => {
   const s = {
-    agent: "codex", id: "x", cwd: "/tmp", mtimeMs: Date.now(),
-    files: [{ file: "a", mtimeMs: 1, size: 1 }], compaction: [],
-    turns: [t(1, "做A", ["A 完成"]), t(2, "做B", ["B 完成"]), t(3, "做C", [], ["还在做 C"])],
+    agent: "codex", id: "x", cwd: "/tmp", files: [],
+    turns: [
+      { i: 1, finals: ["已完成的答复" + "测".repeat(350)], user: "用户原文" },
+      { i: 2, finals: [], narration: ["执行旁白"], tools: [{ name: "exec", target: "内部命令" }] },
+    ],
   };
-  const l1 = buildLevels(s)[0];
-  if (!/未收尾|unfinished/.test(l1.title)) throw new Error(`标题异常: ${l1.title}`);
-  if (!/(退路|fallback)/.test(l1.body) || !/(第 2 轮|turn 2)/.test(l1.body)) throw new Error("没有给出退路");
-  return "退路指向第 2 轮";
+  const latest = render(s);
+  if (latest !== render(s, { turns: parseTurns("last:1") })) throw new Error("默认轮次与 last:1 不一致");
+  if (!/第 2-2 轮|turns 2-2 of 2/.test(latest)) throw new Error(latest);
+  if (!/暂无最终答复|no final answer/.test(latest)) throw new Error(latest);
+  if (/已完成的答复|执行旁白|内部命令/.test(latest)) throw new Error(latest);
+  const first = render(s, { turns: parseTurns("1") });
+  if (!first.includes(s.turns[0].finals[0]) || /用户原文|执行旁白|内部命令/.test(first)) throw new Error(first);
+  const limited = render(s, { turns: parseTurns("1"), maxChars: 200 });
+  if (!/截断|clipped/.test(limited)) throw new Error(limited);
+  return "默认单轮、未收尾提示、指定轮次及字符上限";
 });
 
 check("TOML 段落能被完整摘掉（含重复）", () => {
@@ -555,14 +540,13 @@ check("findSession 取最近活动的那个（同前缀不误选）", () => {
 });
 
 check("AAB_LANG=en 输出英文标签，正文保持原文", () => {
-  const r = spawnSync(NODE, [SB, "latest", "--agent", "codex", "--level", "1"], {
+  const r = spawnSync(NODE, [SB, "latest", "--agent", "codex"], {
     encoding: "utf8",
     env: { ...process.env, AAB_LANG: "en", LANG: "en_US.UTF-8" },
     timeout: 60000,
   });
   if (r.status !== 0) throw new Error(r.stderr.slice(0, 120));
-  if (!r.stdout.includes("【level 1 ·")) throw new Error("level 头缺失");
-  if (!/latest conclusion|latest progress/.test(r.stdout)) throw new Error("标题未英文化");
+  if (!/【turns (\d+)-\1 of \1】/.test(r.stdout)) throw new Error("最新轮次标签缺失");
   if (!/turns? ·/.test(r.stdout) && !r.stdout.includes("turns")) throw new Error("轮次信息未英文化");
   return "英文标签 + 原文正文";
 });
@@ -679,33 +663,13 @@ check("列表带标题（不是只有 id）", () => {
 });
 
 check("最新会话的表头里带标题行", () => {
-  const r = run(["latest", "--level", "1"]);
+  const r = run(["latest"]);
   noCrash(r);
   if (!/^\s{2}标题 /m.test(r.out) && !/^\s{2}title /m.test(r.out)) {
     // 无标题的会话（例如首条就是纯图片）允许没有这一行
     return "当前最新会话无标题，跳过";
   }
   return "表头含标题";
-});
-
-check("level 3 是需求 + 结论（决策链），不是只有需求", () => {
-  const r = run(["read", "--level", "3"]);
-  noCrash(r);
-  const rows = r.out.split("\n").filter((l) => /^[▸ ]?\s*\d+\.\s/.test(l));
-  if (!rows.length) return "本机无会话，跳过";
-  const paired = rows.filter((l) => l.includes("  → "));
-  if (!paired.length) throw new Error("没有任何一轮带结论 —— 退化成纯需求时间线了");
-  return `${paired.length}/${rows.length} 轮带结论`;
-});
-
-check("level 4 的改动面不含依赖目录", () => {
-  const r = run(["read", "--level", "4"]);
-  noCrash(r);
-  const fileRows = r.out.split("\n").filter((l) => /^\s+\d+×\s/.test(l));
-  if (!fileRows.length) return "本机无文件改动，跳过";
-  const bad = fileRows.filter((l) => /node_modules\/|(^|\/)dist\//.test(l));
-  if (bad.length) throw new Error(`改动面混进依赖目录：${bad[0].trim()}`);
-  return `${fileRows.length} 条文件行，无依赖目录`;
 });
 
 check("rule 输出是可直接粘的片段（### 起，元信息不进 stdout）", () => {
@@ -1188,13 +1152,17 @@ await mcpCheck("tools/list 出 5 个工具", async () => {
   for (const w of ["session_latest", "session_list", "session_read", "session_grep", "session_agents"]) {
     if (!names.includes(w)) throw new Error(`缺 ${w}`);
   }
+  for (const tool of r[0].result.tools.filter((t) => ["session_latest", "session_read"].includes(t.name))) {
+    const properties = tool.inputSchema.properties;
+    if ("level" in properties || !properties.turns) throw new Error(`旧轮次接口仍存在：${tool.name}`);
+  }
   return names.join(",");
 });
 
 await mcpCheck("五个工具并发各调一次", async () => {
   const r = await mcpRoundtrip(
     [
-      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "session_latest", arguments: { level: 1 } } },
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "session_latest", arguments: {} } },
       { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "session_list", arguments: { limit: 2 } } },
       { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "session_read", arguments: {} } },
       { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "session_grep", arguments: { query: "的", limit: 1 } } },
@@ -1209,14 +1177,20 @@ await mcpCheck("五个工具并发各调一次", async () => {
   return "5/5";
 });
 
-await mcpCheck("turns 参数走 MCP 也生效", async () => {
-  const r = await mcpRoundtrip(
-    [{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "session_latest", arguments: { turns: "1-1" } } }],
+await mcpCheck("MCP 两个读取工具默认最新一轮，也可指定轮次", async () => {
+  const requests = ["session_latest", "session_read"].flatMap((name) =>
+    [{}, { turns: "1" }].map((args) => ({ name, arguments: args }))
+  );
+  const results = await mcpRoundtrip(
+    requests.map((params, id) => ({ jsonrpc: "2.0", id, method: "tools/call", params })),
     4000
   );
-  const t = r[0]?.result?.content?.[0]?.text || "";
-  if (!t.includes("【第 1-1 轮")) throw new Error(t.slice(0, 120));
-  return "ok";
+  for (const [id, { name, arguments: args }] of requests.entries()) {
+    const text = results.find((r) => r.id === id)?.result?.content?.[0]?.text || "";
+    const expected = args.turns ? /【第 1-1 轮/ : /【第 (\d+)-\1 轮 · 共 \1 轮】/;
+    if (!expected.test(text)) throw new Error(`${name}: ${text.slice(0, 140)}`);
+  }
+  return "两个入口都支持默认最新一轮和指定轮次";
 });
 
 await mcpCheck("未知工具返回 isError", async () => {

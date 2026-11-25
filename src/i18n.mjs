@@ -15,40 +15,10 @@ const DICT = {
     "hdr.title": "  标题 {t}",
     "hdr.unknownPath": "路径未知",
 
-    "l1.title.ok": "最新一条结论",
-    "l1.title.pending": "最新进展（未收尾）",
-    "l1.ask": "第 {i} 轮 · 用户问：{q}",
-    "l1.note.pending": "（该轮没有收尾结论——会话可能中断、仍在运行，或最后一条只是进展旁白）",
-    "l1.note.empty": "（该轮没有任何文本输出）",
-    "l1.empty": "（这个会话里没有解析到对话内容）",
-    "l1.fallback": "\n\n── 退路：最近一条结论在第 {i} 轮（约 +{tok} token）──\n{txt}",
-
-    "l2.title": "最近 {n} 轮问答",
-    "l2.turn": "── 第 {i} 轮 ──\n问：{q}\n论：{a}",
-    "l2.noUser": "（无用户输入，可能由应用侧自动发起）",
-    "l2.noFinal": "（无文本结论）",
-
-    "l3.title": "全部需求与结论（每轮一行）",
-    "l3.comp": "[压缩摘要 {i}/{n}{extra}]",
-    "l3.comp.extra": "（会话共被压缩 {total} 次，此处只取最近 {n} 次）",
-
-    "l4.title": "命令 / 文件 / git 状态",
-    "l4.files": "改动过的文件（整段会话 {turns} 轮累计，共 {files} 个，按出现次数）",
-    "l4.cmds": "命令（{n} 条，最多列最近 15 条）",
-    "l4.tools": "工具调用（{n} 种）",
-    "l4.dirty": "工作区未提交（{n} 项，整个仓库的当前状态）",
-    "l4.dirty.overlap": "  其中与本会话改动文件重合 {n} 项，其余可能来自其它工具/其它会话",
-    "l4.more": "  …还有 {n} 项",
-    "l4.commits": "最近提交：",
-
-    "next.banner": "── 不够就再看一层（同一会话再调一次，换个 level）──",
-    "next.cost": "  level={n}  {title}  ≈ 合计 {total} token（比当前多 {add}）",
-    "next.current": "  当前 level={n}，全文约 {tok} token",
-    "next.maxed": "── 已是最大粒度；再要原文请用 session_grep 指定关键词 ──",
-
-    "lv.head": "【level {n} · {title}】",
+    "turn.empty": "（这个会话里没有解析到对话内容）",
+    "turn.final": "── 第 {i} 轮 ──\n{text}",
+    "turn.noFinal": "（该轮暂无最终答复）",
     "rng.head": "【第 {from}-{to} 轮 · 共 {total} 轮】",
-    "rng.hint": "（按需指定区间；不给 turns 时走 level 阶梯，从最新结论开始）",
     "rng.bad": "轮次区间无效：{from}-{to}（会话共 {total} 轮）",
     "rng.none": "会话里没有第 {from}-{to} 轮（共 {total} 轮）",
 
@@ -164,40 +134,10 @@ const DICT = {
     "hdr.title": "  title {t}",
     "hdr.unknownPath": "unknown path",
 
-    "l1.title.ok": "latest conclusion",
-    "l1.title.pending": "latest progress (unfinished)",
-    "l1.ask": "turn {i} · asked: {q}",
-    "l1.note.pending": "(this turn has no conclusion — the session may be interrupted, still running, or the last message was only a progress note)",
-    "l1.note.empty": "(this turn produced no text)",
-    "l1.empty": "(no conversation content parsed from this session)",
-    "l1.fallback": "\n\n── fallback: last conclusion was turn {i} (~+{tok} token) ──\n{txt}",
-
-    "l2.title": "last {n} turns",
-    "l2.turn": "── turn {i} ──\nQ: {q}\nA: {a}",
-    "l2.noUser": "(no user input — probably started by the app itself)",
-    "l2.noFinal": "(no text conclusion)",
-
-    "l3.title": "full requirement + conclusion timeline",
-    "l3.comp": "[compaction summary {i}/{n}{extra}]",
-    "l3.comp.extra": " (session was compacted {total} times; showing the last {n})",
-
-    "l4.title": "commands / files / git state",
-    "l4.files": "files touched ({turns} turns cumulative, {files} distinct, by frequency)",
-    "l4.cmds": "commands ({n}, last 15)",
-    "l4.tools": "tool calls ({n} kinds)",
-    "l4.dirty": "uncommitted changes ({n} entries — the repo as it is now)",
-    "l4.dirty.overlap": "  {n} of them overlap with files this session touched; the rest may come from other tools/sessions",
-    "l4.more": "  …and {n} more",
-    "l4.commits": "recent commits:",
-
-    "next.banner": "── not enough? ask for another view (same session, another level) ──",
-    "next.cost": "  level={n}  {title}  ≈ {total} token total (+{add} over this reply)",
-    "next.current": "  current level={n} ≈ {tok} token",
-    "next.maxed": "── finest grain reached; use session_grep with a keyword for raw text ──",
-
-    "lv.head": "【level {n} · {title}】",
+    "turn.empty": "(no conversation content parsed from this session)",
+    "turn.final": "── turn {i} ──\n{text}",
+    "turn.noFinal": "(no final answer for this turn)",
     "rng.head": "【turns {from}-{to} of {total}】",
-    "rng.hint": "(explicit slice; without turns the level ladder starts from the newest conclusion)",
     "rng.bad": "invalid turn range: {from}-{to} (session has {total} turns)",
     "rng.none": "session has no turns {from}-{to} (it has {total})",
 
@@ -320,7 +260,7 @@ const LANG = detect();
 
 export const lang = () => LANG;
 
-/** t("l1.ask", { i: 41, q: "..." }) */
+/** t("turn.final", { i: 41, text: "..." }) */
 export function t(id, vars = {}) {
   const s = DICT[LANG]?.[id] ?? DICT.zh[id] ?? id;
   return String(s).replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined ? `{${k}}` : String(vars[k])));

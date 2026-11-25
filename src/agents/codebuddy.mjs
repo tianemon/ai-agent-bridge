@@ -169,8 +169,7 @@ function make({ name, label, dir, env }) {
         }
 
         if (o.type === "function_call") {
-          // WB/CB 把参数写成 JSON 字符串（实测 175/175）；不解析就只能把整串当目标，
-          // level 4 会既数不出命令、也提不出文件。
+          // WB/CB 把参数写成 JSON 字符串（实测 175/175）；解析后可分别识别命令和文件目标。
           let a = o.arguments ?? o.input ?? {};
           if (typeof a === "string") {
             try {

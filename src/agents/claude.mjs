@@ -95,7 +95,7 @@ async function parse(files) {
       if (isU) {
         if (o.isMeta) return;
         // 压缩摘要伪装成 user 消息（isCompactSummary）——它是"更早内容的摘要"，
-        // 不是新的用户需求。单独收起来，只在 level 3 才露头。
+        // 不是新的用户需求。保留为会话压缩摘要。
         if (o.isCompactSummary) {
           const s = textOf(m.content);
           if (s) compaction.push(s.slice(0, 6000));

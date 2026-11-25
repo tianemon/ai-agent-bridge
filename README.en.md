@@ -1,6 +1,6 @@
 # ai-agent-bridge
 
-Read another AI coding tool's session: **newest conclusion first, escalate only as needed**.
+Read another AI coding tool's session: **read the latest turn or select specific turns**.
 
 Two separate concepts:
 
@@ -20,56 +20,19 @@ npx -y @tianemon/ai-agent-bridge doctor      # which sessions are readable, whic
 
 The installed command is `aab` (alias `agent-bridge`). No dependencies; Node ≥ 18.
 
-## Output
+## Reading by turn
 
-```
-■ Codex · 2026-10-25 10:03 · 4 segments · gpt-6.1-sol
-  session 01a16729-0aed-7012 · 99 turns · /Users/amon/dev/project/EasyMint
-  title 解析视频并仿制 UI 风格
+`latest` and `read` return the final answer for the latest turn of the selected session by default. If the turn has no final answer yet, the output says so.
 
-【level 1 · latest progress (unfinished)】
-turn 99 · asked: 重新发布1.4.0
+| `--turns` | Selection |
+|---|---|
+| `15` | Turn 15 |
+| `12-14` | Turns 12 through 14 |
+| `last:5` | The last five turns |
+| `from:30` | Turn 30 through the end |
+| `around:40±2` | Turn 40 and two turns on either side |
 
-(this turn has no conclusion — the session may be interrupted, still running, or the last
-message was only a progress note)
-
-我会把这些界面修正并入 1.4.0，完成发版检查后替换标签和 Release，触发三平台重新构建。
-
-── fallback: last conclusion was turn 98 (~+93 token) ──
-已实现：Mint 头像和名称移到回复上方；去掉回复气泡底色；只有结论保留复制、钉住、重新回答。
-
-── not enough? ask for another view (same session, another level) ──
-  level=2  last 3 turns  ≈ 551 token total (+368 over this reply)
-  level=3  full requirement + conclusion timeline  ≈ 4130 token total (+3947 over this reply)
-  level=4  commands / files / git state  ≈ 2494 token total (+2311 over this reply)
-  current level=1 ≈ 183 token
-```
-
-The source session is 87 MB; `level=1` is 183 tokens.
-
-## Levels
-
-| Level | Content | Cost (measured on the 99-turn session) |
-|---|---|---|
-| 1 | last conclusion + its prompt | 183 tokens |
-| 2 | last 3 turns (prompt + conclusion) | 551 tokens |
-| 3 | every prompt + what it settled on | 4130 tokens |
-| 4 | changed files / commands / git state | 2494 tokens (top 40 files, last 15 commands) |
-| `turns` | explicit slice: `12-14`, `12`, `last:5`, `from:60`, `around:40±2` | by slice |
-
-Each level is an independent view, not an accumulation: a quote is the full cost of that view, regardless of
-where you stopped. Level 3 grows linearly with the turn count and can exceed level 4 on a long session —
-choose by quote, not by depth.
-
-When the last turn has no conclusion (interrupted, still running, or a progress note), level 1 says so
-explicitly and appends the most recent turn that has one, with its turn number and cost.
-
-## Design choices
-
-- **Never read the whole transcript.** Only user prompts, final assistant text, tool-call targets and git
-  state; reasoning blocks, tool output and `base_instructions` are skipped.
-- **Four levels, stop when it is enough.** Each reply quotes the token cost of the next level.
-- **The caller supplies what it already knows** (`--known` / `known`) instead of the tool guessing.
+The MCP tools `session_latest` and `session_read` accept the same `turns` syntax. Each turn displays the final answer identified by its adapter, preserving the source text. The session title and turn numbers help locate the answer.
 
 ## Install
 
@@ -237,14 +200,14 @@ The approval record is issued by WorkBuddy; the tool does not write it. To skip 
 
 ```bash
 aab list --since 24h                     # time, tool, project, id, size, title
-aab latest --agent codex --level 1       # newest conclusion
-aab latest --agent codex --level 3       # one level deeper
+aab latest --agent codex                 # newest conclusion
+aab latest --agent codex --turns last:3 # last three turns
 aab latest --turns 40-41                 # exact range
 aab latest --turns last:5                # last five turns
 aab latest --turns from:60               # turn 60 to the end
 aab latest --turns "around:40±2"         # window around turn 40 (span 3 by default)
 aab latest --known '{"agent":"codex","session":"01a16729","turns":"last:3"}'
-aab read --session 53bf411c --level 2
+aab read --session 53bf411c --turns last:3
 aab grep "paths-ignore" --agent claude --limit 3   # hits carry session id and turn number
 aab rule                                 # standing rule to paste into CLAUDE.md / AGENTS.md
 ```
@@ -348,15 +311,11 @@ Then register it in `LIST` in `src/registry.mjs`.
 ## Limits
 
 - **Session data is read-only.** It never writes another tool's data directory; the only writes are the MCP
-  configs (`install`, previewable). The only external processes are `git log`, `git status` and `git rev-parse`,
-  with fixed arguments and no shell.
-- A single session can reach tens of MB (87 MB measured here); it is read level by level so it never
-  enters the context whole.
+  configs (`install`, previewable).
+- A single session can reach tens of MB (87 MB measured here); only the selected final answers are returned.
 - Windows is untested. The directory-slug fallback assumes POSIX paths; the primary signal is the `cwd` read
   from the file, so this only affects sessions whose header lacks one.
-- It is not a session browser and offers no full-text search UI; it provides tiered reading only.
-- User prompts are reproduced verbatim. Anything typed into the previous tool — including secrets — will
-  appear in the new context.
+- `grep` searches session records for keywords. Matching excerpts can include user input.
 - Only Chinese and English output. Every label goes through the `src/i18n.mjs` dictionary; in English mode a
   single Chinese string makes the tests fail. Adding a language means adding dictionary entries only.
 - WorkBuddy's trust confirmation cannot be automated; `aab doctor` only reports the state.

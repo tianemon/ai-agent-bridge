@@ -1,7 +1,7 @@
 /**
  * CLI：一次性执行，打印结果就退出。
  *
- *   aab latest --agent codex --level 1
+ *   aab latest --agent codex
  *   aab latest --session 01a16729 --turns 40-41
  *   aab list --since 24h
  *   aab grep "关键词" --agent codex
@@ -123,7 +123,7 @@ export async function actLatest(o) {
   return (
     warningsOf(input.warnings) +
     (note ? note + "\n\n" : "") +
-    render(loaded, { level: o.level, maxChars: o["max-chars"], turns: input.turns })
+    render(loaded, { maxChars: o["max-chars"], turns: input.turns })
   );
 }
 
@@ -142,7 +142,7 @@ export async function actRead(o) {
         ? tr("cli.noneAny")
         : tr("cli.noneAgent", { agent: AGENT_LABEL[input.agent] || input.agent });
   const loaded = await loadSession(s);
-  return warningsOf(input.warnings) + render(loaded, { level: o.level, maxChars: o["max-chars"], turns: input.turns });
+  return warningsOf(input.warnings) + render(loaded, { maxChars: o["max-chars"], turns: input.turns });
 }
 
 export function actList(o) {
@@ -209,14 +209,13 @@ export async function actGrep(o) {
   );
 }
 
-const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只给够用的那一层
+const HELP_ZH = `aab —— 按轮次读取另一个 AI 编码工具的会话
 
 用法：
-  aab latest   从最新一条结论开始（默认 level=1，不够再加）
+  aab latest   读取最新一轮结论（可用 --turns 选轮次）
       --agent codex|claude|workbuddy|codebuddy|easymint|dsh|auto   默认 auto（所有来源里最新的）
-      --level 1..4                         1=结论 2=最近3轮 3=需求+结论 4=命令/文件/git
       --session <id 前缀>                   直接锚定某次会话
-      --turns 12-14 | 12 | last:5 | from:30 | around:40±2   直接要某几轮（跳过阶梯）
+      --turns 12-14 | 12 | last:5 | from:30 | around:40±2   直接要某几轮（默认 last:1）
       --since 24h | 2026-10-23              只要这段时间内有活动的
       --project <路径>                      默认当前目录（会归到 git 根）
       --scope auto|project|global           默认 auto：本项目优先，找不到退全机并注明
@@ -224,7 +223,7 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
       --known '<json>'                      调用方已知的信息（见下）
 
   aab list     [--limit 15] [--since 24h] [--agent ...] [--scope ...]
-  aab read     [--session <id>] [--turns 12-14] [--level N]
+  aab read     [--session <id>] [--turns 12-14]
   aab grep     "关键词" [--agent ...] [--since ...] [--limit 8]
   aab mcp      stdio MCP server
   aab install  [easymint|dsh|workbuddy|codex|claude] [--agent <同名逗号列表>] [--dry-run]
@@ -247,11 +246,10 @@ const HELP_ZH = `aab —— 从另一个 AI 编码工具的会话接着干，只
 const HELP_EN = `aab — pick up where another AI coding tool left off, with only as much context as you need.
 
 Usage:
-  aab latest   start from the newest conclusion (level=1 by default; raise it if needed)
+  aab latest   read the latest turn’s final answer by default
       --agent codex|claude|workbuddy|codebuddy|easymint|dsh|auto   default: auto (newest across all)
-      --level 1..4                      1=conclusion 2=last 3 turns 3=requirement+conclusion 4=commands/files/git
       --session <id prefix>             anchor to one specific session
-      --turns 12-14 | 12 | last:5 | from:30 | around:40±2   exact slice (skips the ladder)
+      --turns 12-14 | 12 | last:5 | from:30 | around:40±2   exact slice (default: last:1)
       --since 24h | 2026-10-23          only sessions active in this window
       --project <path>                  default: cwd (resolved to the git root)
       --scope auto|project|global       default auto: this project first, else whole machine (noted)
@@ -259,7 +257,7 @@ Usage:
       --known '<json>'                  what the caller already knows (see below)
 
   aab list     [--limit 15] [--since 24h] [--agent ...] [--scope ...]
-  aab read     [--session <id>] [--turns 12-14] [--level N]
+  aab read     [--session <id>] [--turns 12-14]
   aab grep     "keyword" [--agent ...] [--since ...] [--limit 8]
   aab mcp      stdio MCP server
   aab install  [easymint|dsh|workbuddy|codex|claude] [--agent <same list, comma separated>] [--dry-run]

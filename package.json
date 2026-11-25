@@ -1,6 +1,6 @@
 {
   "name": "@tianemon/ai-agent-bridge",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Read another AI coding tool's session — read final answers for the turns you select.",
   "type": "module",
   "bin": {
